@@ -29,7 +29,6 @@ def background(img: np.ndarray, region_size: int=10):
             slice(center[1]-region, center[1]+region))
 
 
-
 def background_stats(img: np.ndarray, slices: tuple):
     """Calculate and return background statistics. Procedure is following
     from Pink_Experiments repo written originally by EH/KP. 
@@ -189,9 +188,10 @@ def main(files: list, out_path: str, *args,
 
     return success
 
+
 if __name__ == '__main__':
 
-    df = pd.read_csv('FIRST_Catalog.csv')
+    df = pd.read_csv('FIRST_Cata_Images.csv')
     files = df['filename'].values[:1000]
     
     success_imgs = main(files, 'F1W1_95_5_imgs.bin')
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     # have to handle this in this manner. 
     sub_df = df['filename'].isin(success_imgs)
 
-    sub_df.to_csv('F1W1_Sources.csv')
-    sub_df.to_pickle('F1W1_Sources.pkl')
-    sub_df.to_json('F1W1_Sources.json')
+    sub_df.to_csv('F1W1_95_5_Sources.csv')
+    sub_df.to_pickle('F1W1_95_5_Sources.pkl')
+    sub_df.to_json('F1W1_95_5_Sources.json')
 

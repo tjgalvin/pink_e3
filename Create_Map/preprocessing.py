@@ -103,7 +103,11 @@ def wise_process(img: np.ndarray, *args, inner_frac: int=5,
 
     # Replace empty pixels
     img[bstats['empty']] = np.random.normal(loc=bstats['mean'], scale=bstats['std'],
-                                            size=np.sum(bstats['empty'].flatten()))
+                                          size=np.sum(bstats['empty'].flatten()))
+    # Clip out nasty values to allow the log10 to work
+    # PINK does not like having nans or infs
+    img = np.clip(img, 0.0001, 1e10)
+
     if log10:
         img = np.log10(img)
 

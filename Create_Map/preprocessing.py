@@ -147,7 +147,7 @@ def main(files: list, out_path: str, *args,
         Exception -- Catch all used for removing files that fail preprocessing
     """
 
-    shape = get_fits(files[0]).shape
+    shape = get_fits(f"{first_path}/{files[0]}").shape
     height, width = shape
 
     print(f'Derived height, width: {height}, {width}')
@@ -165,11 +165,9 @@ def main(files: list, out_path: str, *args,
 
         for f in tqdm(files):
             try:
-                print(f"{first_path}/{f}")
                 img_first = get_fits(f"{first_path}/{f}")
                 img_first = first_process(img_first, *args, weight=first_weight, **kwargs) 
                 
-                f"{wise_path}/{f}"
                 img_wise = get_fits(f"{wise_path}/{f}")
                 img_wise = wise_process(img_wise, *args, weight=wise_weight, **kwargs)
 

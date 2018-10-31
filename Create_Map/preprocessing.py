@@ -77,6 +77,9 @@ def first_process(img: np.ndarray, *args, inner_frac: int=5, clip_level: int=1,
     # Attempts to reduce the effect of nearby, unrelated sources
     # This is different to the Galvin+18 preprocessing
     scale = np.max(img[slices])
+    if scale == 0.:
+        raise ValueError(F"FIRST Scale is {scale}.")
+    
     img = img / scale
 
     # Appply channel weight
@@ -181,8 +184,10 @@ def main(files: list, out_path: str, *args,
                 # Need to keep track of successfully written file names
                 success.append(f)
             
-            except Exception:
-                raise Exception
+            except ValueError as ve:
+                print(f"{f}: {ve}")
+            except Exception as e:
+                raise e
 
         # Update header here
         of.seek(0)
@@ -196,7 +201,7 @@ def main(files: list, out_path: str, *args,
 if __name__ == '__main__':
 
     df = pd.read_csv('FIRST_Cata_Images.csv')
-    files = df['filename'].values[:1000]
+    files = df['filename'].values[:10000]
     
     success_imgs = main(files, 'F1W1_95_5_imgs.bin')
 

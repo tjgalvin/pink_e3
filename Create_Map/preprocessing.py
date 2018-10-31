@@ -61,7 +61,7 @@ def first_process(img: np.ndarray, *args, inner_frac: int=5, clip_level: int=1,
         weight {float} -- Weight to apply to the channel
     """
     size = img.shape[0] # Lets assume equal pixel sizes
-    slices = background(img, region_size=int(size/5))
+    slices = background(img, region_size=int(size/2))
     bstats = background_stats(img, slices)
 
     # Replace empty pixels

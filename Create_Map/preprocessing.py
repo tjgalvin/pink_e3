@@ -196,7 +196,7 @@ def main(files: list, out_path: str, *args,
         of.seek(0)
         of.write(st.pack('i', len(success)))
 
-        print(f"Have written out {len(success)} files")
+        print(f"Have written out {len(success)}/{len(files)} files")
 
     return success, failed
 
@@ -204,8 +204,8 @@ def main(files: list, out_path: str, *args,
 if __name__ == '__main__':
 
     df = pd.read_csv('FIRST_Cata_Images.csv')
-    files = df['filename'].values[:10000]
-    
+    files = df['filename'].values
+
     imgs = main(files, 'F1W1_95_5_imgs.bin')
     success_imgs, failed_imgs = imgs
 

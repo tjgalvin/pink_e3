@@ -169,6 +169,7 @@ def main(files: list, out_path: str, *args,
 
         # Will be used to update PINK header at the end
         success = []
+        failed  = [] 
 
         for f in tqdm(files):
             try:
@@ -186,6 +187,8 @@ def main(files: list, out_path: str, *args,
             
             except ValueError as ve:
                 print(f"{f}: {ve}")
+                failed.append(f)
+
             except Exception as e:
                 raise e
 
@@ -195,7 +198,7 @@ def main(files: list, out_path: str, *args,
 
         print(f"Have written out {len(success)} files")
 
-    return success
+    return success, failed
 
 
 if __name__ == '__main__':
@@ -203,14 +206,21 @@ if __name__ == '__main__':
     df = pd.read_csv('FIRST_Cata_Images.csv')
     files = df['filename'].values[:10000]
     
-    success_imgs = main(files, 'F1W1_95_5_imgs.bin')
+    imgs = main(files, 'F1W1_95_5_imgs.bin')
+    success_imgs, failed_imgs = imgs
 
     # If images were not successfully dumped, then they should be excluded
     # from the catalogue. Until a newer format is supported by PINK, we 
     # have to handle this in this manner. 
-    sub_df = df['filename'].isin(success_imgs)
+    sub_df = df[df['filename'].isin(success_imgs)]
 
     sub_df.to_csv('F1W1_95_5_Sources.csv')
     sub_df.to_pickle('F1W1_95_5_Sources.pkl')
     sub_df.to_json('F1W1_95_5_Sources.json')
+
+    sub_df = df[df['filename'].isin(failed_imgs)]
+
+    sub_df.to_csv('F1W1_95_5_Sources_Failed.csv')
+    sub_df.to_pickle('F1W1_95_5_Sources_Failed.pkl')
+    sub_df.to_json('F1W1_95_5_Sources_Failed.json')
 

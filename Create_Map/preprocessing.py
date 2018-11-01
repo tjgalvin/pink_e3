@@ -188,6 +188,9 @@ def main(files: list, out_path: str, *args,
             except ValueError as ve:
                 print(f"{f}: {ve}")
                 failed.append(f)
+            except FileNotFoundError as fe:
+                print(f"{f}: {fe}")
+                failed.append(f)
 
             except Exception as e:
                 raise e

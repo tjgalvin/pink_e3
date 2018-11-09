@@ -59,7 +59,11 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
 
     # Structure to keep references to objects created in matplotlib callbacks
     a = SaveCallback()
-    dl[key] = 0
+    dl[key] = None
+
+    # Items needed to be bound to
+    x, y = np.meshgrid(np.arange(r_n.shape[1]), np.arange(r_n.shape[0]))
+    pix = np.vstack((x.flatten(), y.flatten())).T
 
     fig, (ax1, ax2, ax3) = plt.subplots(1,3)
 
@@ -76,7 +80,7 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
 
         if event.key == 'c':
             mask[:,:] = 0 # Slice into, make sure bounded mask OK
-            ax3.imshow(mask)
+            ax3.imshow(mask, cmap='bwr')
             fig.canvas.draw_idle()
         
         elif event.key == 'm':
@@ -84,7 +88,7 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
             img_cp[r_n < a.SIGMA * r_n.std()] = 0
             mask[:,:] = img_cp # Slice into, make sure bounded mask OK
 
-            ax3.imshow(mask)
+            ax3.imshow(mask, cmap='bwr')
             fig.canvas.draw_idle()
 
         elif event.key == 'h':
@@ -95,13 +99,16 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
             ones = convex_hull_image(ones)
             mask[ones] = 1
 
-            ax3.imshow(mask)
+            ax3.imshow(mask, cmap='bwr')
             fig.canvas.draw_idle()
 
-        elif event.key == 's':
-            print(f"{key}: Moving on and saving.\n")
-            dd[key] = mask
-            plt.close(fig)
+        elif event.key in ['s', 'enter']:
+            if dl[key] is not None:
+                print(f"{key}: Moving on and saving.\n")
+                dd[key] = mask
+                plt.close(fig)
+            else:
+                print(f"{key}: Need to apply label before moving on")
 
         elif event.key == 'n':
             print(f"{key}: Moving on without.\n")
@@ -116,22 +123,18 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
             print(f"Sigma moved to {a.SIGMA}")
 
         elif event.key in ['0','1','2','3','4','5','6','7','8','9']:
-            print(f"Label is set to: {event.key}")
+            print(f"{key}: Label is set to: {event.key}")
             dl[key] = event.key
 
             fig.suptitle(f"{key} - Label: {event.key}")
             fig.canvas.draw_idle()
 
-
-        elif event.key == 'enter':
-            print(f"{key}: Moving on and saving.\n")
-            dd[key] = mask
-            plt.close(fig)
-
         else:
             print(f"Captured key is: {event.key}")
             print('\n',msg)
 
+
+    # Callback for lasso selector
     def onselect(verts):
 
         # Select elements in original array bounded by selector path:
@@ -139,10 +142,10 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
         ind = p.contains_points(pix, radius=1)
         
         mask.flat[ind] = r_n.flat[ind]
-        ax3.imshow(mask)
+        ax3.imshow(mask, cmap='bwr')
         
         max_point = np.unravel_index(np.argmax(mask), mask.shape)
-        ax3.plot(max_point[1], max_point[0], 'ro', ms=10)
+        # ax3.plot(max_point[1], max_point[0], 'ro', ms=10)
 
         fig.canvas.draw_idle()
 
@@ -151,15 +154,12 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
     fig.canvas.mpl_connect('key_press_event', press)
     lasso = LassoSelector(ax1, onselect)
 
-    ax1.imshow(r_n)
-    ax2.imshow(w_n)
-    ax3.imshow(np.zeros_like(r_n))
+    ax1.imshow(r_n, cmap='bwr')
+    ax2.imshow(w_n, cmap='bwr')
+    ax3.imshow(np.zeros_like(r_n), cmap='bwr')
 
     fig.suptitle(f"{key} - Label: {dl[key]}")
     fig.tight_layout()
-
-    x, y = np.meshgrid(np.arange(r_n.shape[1]), np.arange(r_n.shape[0]))
-    pix = np.vstack((x.flatten(), y.flatten())).T
 
     plt.show()
 
@@ -246,12 +246,13 @@ def dump_labels(path: str):
 
 if __name__ == '__main__':
     som_path = '../Experiment/Experiment_F3W2_95_5/Results/F3W2_95_5/F3W2S_95_5_5.bin'
+    som_path = '../Create_Map/Layer_1/F1W1_95_5_SOM_3.bin'
     som = pu.som(som_path)
 
     chan, height, width, depth, n_height, n_width = som.file_head
 
-    max_y = 4
-    max_x = 4
+    max_y = height
+    max_x = width
 
     for y in range(max_y):
         for x in range(max_x):
@@ -265,3 +266,5 @@ if __name__ == '__main__':
     mask = compact_dd(som, y=max_y, x=max_x)
 
     dump_mask(som, mask, 'testing_mask_dump.bin', y=max_y, x=max_x)
+
+    dump_labels('dumping_labels.pkl')

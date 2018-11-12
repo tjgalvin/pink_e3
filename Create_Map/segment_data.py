@@ -186,7 +186,7 @@ def segment_main(args: dict):
         segment_catalog(args['csv'], match_idx, args['out_base'])
 
     np.save(f"{args['out_base']}_match_prob", match_prob)
-    np.sabe(f"{args['out_base']}_match_idx", match_idx)
+    np.save(f"{args['out_base']}_match_idx", match_idx)
 
 
 if __name__ == '__main__':

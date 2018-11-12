@@ -30,7 +30,6 @@ msg = """Possible actions are:
 'm' - Derive a mask from a 3 sigma level clip
 'h' - Perform 'm' and then apply a convex hull
 's' - Save and move onto next item
-'n' - Move onto next item without saving
 '0'-'9' - Record a class label. Default is 0. 
 """
 
@@ -65,7 +64,7 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
     x, y = np.meshgrid(np.arange(r_n.shape[1]), np.arange(r_n.shape[0]))
     pix = np.vstack((x.flatten(), y.flatten())).T
 
-    fig, (ax1, ax2, ax3) = plt.subplots(1,3)
+    fig, (ax1, ax2, ax3) = plt.subplots(1,3, figsize=(10,4))
 
     # Make mask
     mask = np.zeros_like(r_n)
@@ -110,10 +109,6 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
             else:
                 print(f"{key}: Need to apply label before moving on")
 
-        elif event.key == 'n':
-            print(f"{key}: Moving on without.\n")
-            plt.close(fig)
-
         elif event.key == 'down':
             a.SIGMA = a.SIGMA - 1
             print(f"Sigma moved to {a.SIGMA}")
@@ -152,7 +147,8 @@ def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
 
     # Attach the widgets onto the figure
     fig.canvas.mpl_connect('key_press_event', press)
-    lasso = LassoSelector(ax1, onselect)
+    lasso1 = LassoSelector(ax1, onselect)
+    lasso2 = LassoSelector(ax2, onselect)
 
     ax1.imshow(r_n, cmap='bwr')
     ax2.imshow(w_n, cmap='bwr')
@@ -256,10 +252,10 @@ if __name__ == '__main__':
 
     for y in range(max_y):
         for x in range(max_x):
+            key = (y, x)
+
             r_n = som.get_neuron(y=y, x=x, channel=0)
             w_n = som.get_neuron(y=y, x=x, channel=1)
-
-            key = (y, x)
 
             main(r_n, w_n, key)
 

@@ -26,6 +26,23 @@ def no_ticks(ax):
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
 
+
+def header_offset(path):
+    """Determine the offset required to ignore the header information
+    of a PINK binary
+    
+    Arguments:
+        path {str} -- Path to the pink binary file
+    """
+    with open(path, 'rb') as fd:
+        offset = 0
+        for line in fd:
+            if not line.startswith(b'#'):
+                return offset
+            else:
+                offset = fd.tell()
+            
+
 class heatmap:
     '''Helper to interact with a heatmap output
     '''
@@ -35,18 +52,9 @@ class heatmap:
         self.path = path
         self.fd = None # File descriptor to access if needed
         self.header_info = None
-        self.offset = 0
-        self.data = None
+        self.offset = header_offset(self.path)
+        self.data = self._read_data()
 
-        # Skip the PINK header information
-        with open(self.path, 'rb') as fd:
-            for line in fd:
-                if not line.startswith(b'#'):
-                    self.offset == fd.tell()
-                    break
-            
-            self.offset == fd.tell()
-            
 
     @property
     def f(self):
@@ -81,6 +89,29 @@ class heatmap:
         return self.header_info
 
 
+    def _read_data(self):
+        """Function to read in the data upon creating the heatmap
+        """
+        # Get file handler seeked to after the header
+        f = self.f
+
+        # no_images, som_width, som_height, som_depth = struct.unpack('i' * 4, f.read(4*4))
+        no_images, som_width, som_height, som_depth = self.details
+
+        size = som_width * som_height * som_depth
+        image_width = som_width
+        image_height = som_depth * som_height
+
+        # Seek the image number here
+        f.seek(4*4, 0)
+        array = np.array(struct.unpack('f' * size*no_images, f.read(no_images*size * 4)))
+        data = np.ndarray([no_images, som_width, som_height, som_depth], 'float', array)
+        data = np.swapaxes(data, 1, 3)
+        data = np.reshape(data, (no_images, image_height, image_width))
+
+        return data
+
+
     def _ed_to_prob(self, ed, stretch=10, *args, **kwargs):
         '''Function to conver the euclidean distance to a likelihood
         '''
@@ -94,43 +125,9 @@ class heatmap:
         '''Get the Euclidean distance of the i't page
         '''
 
-        if self.data is None:
-            # Get file handler seeked to after the header
-            f = self.f
-
-            # no_images, som_width, som_height, som_depth = struct.unpack('i' * 4, f.read(4*4))
-            no_images, som_width, som_height, som_depth = self.details
-
-            size = som_width * som_height * som_depth
-            image_width = som_width
-            image_height = som_depth * som_height
-
-            # Seek the image number here
-            f.seek(4*4, 0)
-            array = np.array(struct.unpack('f' * size*no_images, f.read(no_images*size * 4)))
-            data = np.ndarray([no_images, som_width, som_height, som_depth], 'float', array)
-            data = np.swapaxes(data, 1, 3)
-            data = np.reshape(data, (no_images, image_height, image_width))
-
-            self.data = data
-        else:
-            data = self.data
-
-        data = data[index]
+        data = self.data[index]
 
         return data
-
-        # ------
-        # Original
-        # # Seek the image number here
-        # # f.seek(index * size * 4, 1)
-        # f.seek(index * size * 4 + 4*4, 0)
-        # array = np.array(struct.unpack('f' * size, f.read(size * 4)))
-        # data = np.ndarray([som_width, som_height, som_depth], 'float', array)
-        # data = np.swapaxes(data, 0, 2)
-        # data = np.reshape(data, (image_height, image_width))
-
-        # return data
 
 
     def ed(self, index=0, prob=False, *args, **kwargs):
@@ -265,6 +262,7 @@ class image_binary:
         TODO: Add the PINK header consumer to the file_head and opening methods/properties
         '''
         self.path = path
+        self.offset = header_offset(self.path)
 
     def get_image(self, index=0, channel=0):
         '''Return the index-th image that was dumped to the binary image file that
@@ -283,7 +281,7 @@ class image_binary:
                 return None
 
             size = width * height
-            f.seek((index*no_channels + channel) * size*4, 1)
+            f.seek(self.offset + (index*no_channels + channel) * size*4)
             array = np.array(struct.unpack('f' * size, f.read(size*4)))
             data = np.ndarray([width,height], 'float', array)
 
@@ -397,8 +395,8 @@ class som:
         som_spec = self.file_head
         data = self.get_som(channel=channel)
     
-        d = data[x*som_spec[5]:(x+1)*som_spec[5], 
-                 y*som_spec[5]:(y+1)*som_spec[5]]
+        d = data[y*som_spec[5]:(y+1)*som_spec[5], 
+                 x*som_spec[5]:(x+1)*som_spec[5]]
 
         return d.copy()
 

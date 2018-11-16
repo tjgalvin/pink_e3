@@ -76,11 +76,13 @@ def first_process(img: np.ndarray, *args, inner_frac: int=5, clip_level: int=1,
     # Scale is of the maximum pixel in the inner region
     # Attempts to reduce the effect of nearby, unrelated sources
     # This is different to the Galvin+18 preprocessing
-    scale = np.max(img[slices])
-    if scale == 0.:
-        raise ValueError(F"FIRST Scale is {scale}.")
+    # scale = np.max(img[slices])
+    # if scale == 0.:
+    #     raise ValueError(F"FIRST Scale is {scale}.")
+    # img = img / scale
     
-    img = img / scale
+    # MinMax scale the image
+    img = (img - np.min(img)) / (np.max(img) - np.min(img))
 
     # Appply channel weight
     img = img * weight
@@ -89,20 +91,24 @@ def first_process(img: np.ndarray, *args, inner_frac: int=5, clip_level: int=1,
 
 
 def wise_process(img: np.ndarray, *args, inner_frac: int=5, 
-                weight: float=1., log10: bool=True):
+                weight: float=1., log10: bool=True, nan_limit: int=20):
     """Procedure to preprocess WISE data
     
     Arguments:
         img {np.ndarray} -- [description]
     
     Keyword Arguments:
-        weight {float} -- [description] (default: {1.})
+        weight {float} -- Weight to apply to the channel (default: {1.})
         inner_fact {int} -- Fraction of the inner region to extract
-        log10 {bool} -- [description] (default: {True})
+        log10 {bool} -- log10 the data before returning (default: {True})
+        nan_limit {int} -- Limit on how many pixels are allowed to be blank before rejecting (default: {20})
     """
     size = img.shape[0] # Lets assume equal pixel sizes
     slices = background(img, region_size=int(size/5))
     bstats = background_stats(img, slices)
+
+    if np.sum(bstats['empty']) > nan_limit:
+        raise ValueError('To many NaN pixels')
 
     # Replace empty pixels
     img[bstats['empty']] = np.random.normal(loc=bstats['mean'], scale=bstats['std'],

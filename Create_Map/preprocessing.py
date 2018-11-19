@@ -88,7 +88,7 @@ def first_process(img: np.ndarray, *args, inner_frac: int=5, clip_level: int=1,
     img = img * weight
 
     # Final check to flag out any images with a non-finite
-    if np.sum(~p.finite(img)) > 0:
+    if np.sum(~np.finite(img)) > 0:
         raise ValueError(F"FIRST contains non-finite values.")
 
     return img
@@ -131,7 +131,7 @@ def wise_process(img: np.ndarray, *args, inner_frac: int=5,
     img = img * weight
 
     # Final check to flag out any images with a non-finite
-    if np.sum(~p.finite(img)) > 0:
+    if np.sum(~np.finite(img)) > 0:
         raise ValueError(F"WISE contains non-finite values.")
 
     return img

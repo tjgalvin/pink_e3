@@ -11,6 +11,8 @@ keyboard shortcuts useless.
 import matplotlib.pyplot as plt
 plt.rcParams['keymap.save'] = ''
 
+import argparse
+
 import numpy as np
 import pink_utils as pu
 
@@ -47,7 +49,7 @@ class SaveCallback():
         self.SIGMA = 3
 
 
-def main(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
+def annotate_neuron(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
     """Interactive process for annotation
     
     Arguments:
@@ -229,21 +231,29 @@ def dump_mask(som: pu.som, mask: np.ndarray, path: str, y: int=None, x: int=None
         np.asfortranarray(mask.astype('f')).tofile(of)
 
 
-def dump_labels(path: str):
+def dump_labels(labels: dict, path: str):
     """Save the label structure
     
     Arguments:
+        labels {dict} -- Dict structure containing the annotated labels
         path {str} -- Path to save the dictionary to
     """
     import pickle
 
-    pickle.dump(dl, open(path, 'wb'))
+    pickle.dump(labels, open(path, 'wb'))
 
 
 if __name__ == '__main__':
-    som_path = '../Experiment/Experiment_F3W2_95_5/Results/F3W2_95_5/F3W2S_95_5_5.bin'
-    som_path = '../Create_Map/Layer_1/F1W1_95_5_SOM_3.bin'
-    som = pu.som(som_path)
+
+    parser = argparse.ArgumentParser(description='Small utility to assist in the annotation of a PINK SOM. Can '\
+                                                'record user specified labels and facilitate creation of masking regions.')
+    parser.add_argument('SOM', description='Path to a PINK SOM')
+    parser.add_argument('output', description='Base path for labels and mask to be outputted as.')
+
+    args = parser.parse_args()
+    args = vars(args)
+
+    som = pu.som(args['SOM'])
 
     chan, height, width, depth, n_height, n_width = som.file_head
 
@@ -257,10 +267,10 @@ if __name__ == '__main__':
             r_n = som.get_neuron(y=y, x=x, channel=0)
             w_n = som.get_neuron(y=y, x=x, channel=1)
 
-            main(r_n, w_n, key)
+            annotate_neuron(r_n, w_n, key)
 
     mask = compact_dd(som, y=max_y, x=max_x)
 
-    dump_mask(som, mask, 'testing_mask_dump.bin', y=max_y, x=max_x)
+    dump_mask(som, mask, f"{args['output']}_mask.bin", y=max_y, x=max_x)
 
-    dump_labels('dumping_labels.pkl')
+    dump_labels(dl, f"{args['output']}_labels.pkl")

@@ -35,8 +35,6 @@ msg = """Possible actions are:
 '0'-'9' - Record a class label. Default is 0. 
 """
 
-print('\n')
-print(msg)
 dd = {}
 dl = {}
 
@@ -57,6 +55,9 @@ def annotate_neuron(r_n: np.ndarray, w_n: np.ndarray, key: tuple):
         w_n {np.ndarray} -- PINK IR neuron
         key {tuple} -- position of the neuron
     """
+    
+    print('\n')
+    print(msg)
 
     # Structure to keep references to objects created in matplotlib callbacks
     a = SaveCallback()
@@ -246,9 +247,9 @@ def dump_labels(labels: dict, path: str):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Small utility to assist in the annotation of a PINK SOM. Can '\
-                                                'record user specified labels and facilitate creation of masking regions.')
-    parser.add_argument('SOM', description='Path to a PINK SOM')
-    parser.add_argument('output', description='Base path for labels and mask to be outputted as.')
+                                                 'record user specified labels and facilitate creation of masking regions.')
+    parser.add_argument('SOM', help='Path to a PINK SOM')
+    parser.add_argument('output', help='Base path for labels and mask to be outputted as. File formats automatically appended. ')
 
     args = parser.parse_args()
     args = vars(args)

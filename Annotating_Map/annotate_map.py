@@ -250,6 +250,8 @@ if __name__ == '__main__':
                                                  'record user specified labels and facilitate creation of masking regions.')
     parser.add_argument('SOM', help='Path to a PINK SOM')
     parser.add_argument('output', help='Base path for labels and mask to be outputted as. File formats automatically appended. ')
+    parser.add_argument('--save', '-s', action='store_false', default=True, help='Save the annotated labels and mask.')
+
 
     args = parser.parse_args()
     args = vars(args)
@@ -272,6 +274,7 @@ if __name__ == '__main__':
 
     mask = compact_dd(som, y=max_y, x=max_x)
 
-    dump_mask(som, mask, f"{args['output']}_mask.bin", y=max_y, x=max_x)
+    if args['save']:
+        dump_mask(som, mask, f"{args['output']}_mask.bin", y=max_y, x=max_x)
 
-    dump_labels(dl, f"{args['output']}_labels.pkl")
+        dump_labels(dl, f"{args['output']}_labels.pkl")

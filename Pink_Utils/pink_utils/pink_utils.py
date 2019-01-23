@@ -12,6 +12,7 @@ import pandas as pd
 import struct
 import astropy.units as u
 from scipy.ndimage import rotate as sci_rotate
+from collections import defaultdict
 
 __author__ = 'Tim Galvin'
 
@@ -499,3 +500,42 @@ class neuron:
         pos = np.unravel_index(np.argmax(img), img.shape)
         
         return pos
+
+
+class Annotation():
+    """Structure to save annotated positions and other information
+    """
+    def __init__(self, key: tuple, neurons: list):
+        """Create new Annotation instance
+        
+        Arguments:
+            key {tuple} -- Location of neuron
+            neuron {list} -- list of the PINK neurons
+        """
+        self.key = key
+        self.neurons = neurons
+        self.neuron_dims = [tuple(n.shape) for n in neurons]
+        self.clicks = defaultdict(list)
+        self.type = None
+    
+    def add_click(self, channel: int, position: tuple):
+        """Add a new click position to the data structure
+        
+        Arguments:
+            channel {int} -- The channel the click was made in
+            position {tuple} -- Position of the click on the image (x, y)
+        """
+        self.clicks[channel].append(position)
+
+    def table_data(self):
+        """Helper function to create a dictionary with information to 
+        save in table form. Will not return the neurons, just the type
+        and click information. 
+        """
+        # Remove the default factory? Not sure if really needed
+        data = {f'{k}_clicks': v for k,v in self.clicks.items()}
+        data['key'] = self.key
+        data['type'] = self.type
+        data['dims'] = self.neuron_dims
+
+        return data

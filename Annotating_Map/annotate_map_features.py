@@ -191,6 +191,8 @@ def annotate_neuron(neurons, key: tuple, cmap: str=None, results: Annotation=Non
 
     for n, ax in zip(neurons, axes.flat):
         ax.imshow(n, cmap=cmap)
+        # ax.axvline(n.shape[1]/2 - 1, color='black')
+        # ax.axhline(n.shape[0]/2 - 1, color='black')
 
     mask_ax.imshow(mask)
     mask_ax.set(title='Masking ')

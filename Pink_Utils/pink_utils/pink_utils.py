@@ -4,6 +4,9 @@ Basic functions to help interact with PINK binaries and related objects.
 To be treated as a private module for the moment until more mature. 
 
 TODO: Add proper and consistent documentation to classes and docstrings
+TODO: Consistency for positions on images. Consider (y, x) type standard
+      with origin top left. Goes for the annotation_map and SOM plotting
+      code
 """
 
 import matplotlib.pyplot as plt 
@@ -11,10 +14,92 @@ import numpy as np
 import pandas as pd
 import struct
 import astropy.units as u
-from scipy.ndimage import rotate as sci_rotate
+from astropy.coordinates import SkyCoord, SkyOffsetFrame, ICRS
+from scipy.ndimage import rotate as img_rotate
 from collections import defaultdict
 
 __author__ = 'Tim Galvin'
+
+# ------------------------------------------------------------------------------
+# Image manipulation
+# ------------------------------------------------------------------------------
+
+def zoom(img, in_y, in_x):
+    diff_x = in_x // 2
+    diff_y = in_y // 2
+    
+    cen_x = img.shape[1] // 2
+    cen_y = img.shape[0] // 2
+    
+    return img[cen_y-diff_y:cen_y+diff_y,
+               cen_x-diff_x:cen_x+diff_x]
+
+# ------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------
+# Position SkyCoord related tasks
+# ------------------------------------------------------------------------------
+
+def estimate_position(pos: SkyCoord, dx: int, dy: int, pix_scale: u= 1*u.arcsec):
+    """Calculate a RA/Dec position given a central position and offsets. 
+    
+    Arguments:
+        pos {SkyCoord} -- Position offsets are relative from
+        dx {int} -- 'RA' pixel offsets
+        dy {int} -- 'Dec' pixel offsets
+        pix_scale {u} -- Pixel scale. Assume square pixels. 
+    """
+    # Turn pixel offsets to angular
+    dx *= pix_scale
+    dy *= pix_scale
+
+    # RA increases right to left
+    dx = -dx
+    
+    new_frame = SkyOffsetFrame(origin=pos)
+    new_pos = SkyCoord(lon=dx, lat=dy, frame=new_frame)
+    
+    return new_pos.transform_to(ICRS)
+
+    # # Turn pixel offsets to angular
+    # dx = dx * pix_scale * np.cos(pos.dec.radian)
+    # dy *= pix_scale
+
+    # # Obtain relative position. RA on sky increases right to left. 
+    # # Think there is a cos(dec) term in here that needs to be handled?
+    # offset_pos = SkyCoord(pos.ra - dx, pos.dec + dy)
+
+    # return offset_pos
+
+
+def great_circle_offsets(pos1: SkyCoord, pos2: SkyCoord, pix_scale: u=None):
+    """Compute the great circle offsets between two points. Transform to 
+    pixel offsets if a pix_scale is given. 
+
+    TODO: Add center keyword
+    TODO: Allow rectangular pixels
+    
+    Arguments:
+        pos1 {SkyCoord} -- First position
+        pos2 {SkyCoord} -- Second position
+    
+    Keyword Arguments:
+        pix_scale {u} -- Pixel scale used to transform to pixel dimensions (default: {None})
+    """
+
+    offsets = pos1.spherical_offsets_to(pos2)
+
+    if pix_scale is None:
+        return pix_scale
+    
+    # In pixel space, RA increases right to left
+    offsets = (-(offsets[0].to(u.arcsecond)/pix_scale.to(u.arcsecond)), 
+                (offsets[1].to(u.arcsecond)/pix_scale.to(u.arcsecond)))
+
+    return offsets
+
+# ------------------------------------------------------------------------------
 
 def no_ticks(ax):
     '''Disable ticks
@@ -141,6 +226,33 @@ class heatmap:
         return arr
 
 
+    def get_bmu(self, index:int):
+        """Return the position of the best matching neuron for a given
+        object index
+        
+        TODO: Support other modes (e.g. worst neuron, n-th neuron)
+
+        Arguments:
+            index {int} -- Index of source to get BMU of
+        """
+        hmap = self.ed(index=index)
+        pos_min = np.unravel_index(np.argmin(hmap), hmap.shape)
+
+        return pos_min
+
+    def get_bmu_ed(self, index: int):
+        """Return the ED of the best matching neuron
+        
+        TODO: Support other modes (e.g. worst neuron, n-th neuron)
+
+        Arguments:
+            index {int} -- Index of image to get the ED of
+        """
+
+        return np.min(self.ed(index=index))
+
+
+
 class transform:
     '''Helper to interact with the transform output from pink
     '''
@@ -254,6 +366,19 @@ class transform:
         return arr
 
 
+    def get_neuron_transform(self, index: int, pos: tuple):
+        """Return the transform matrix for a desired source at the corresponding neuron
+        position
+        
+        Arguments:
+            index {int} -- Desired source in collection to look at
+            pos {tuple} -- Neuron position the transform should be retrieved for
+        """
+        rot = self.transform(index=index).reshape(self.header_info[1:])
+        flip, ro = rot[pos[1], pos[0]][0]    
+
+        return flip, ro
+
 class image_binary:
     '''Helper to interact with a heatmap output
     '''
@@ -282,7 +407,7 @@ class image_binary:
                 return None
 
             size = width * height
-            f.seek(self.offset + (index*no_channels + channel) * size*4)
+            f.seek(4*4 + self.offset + (index*no_channels + channel) * size*4)
             array = np.array(struct.unpack('f' * size, f.read(size*4)))
             data = np.ndarray([width,height], 'float', array)
 
@@ -402,7 +527,7 @@ class som:
         return d.copy()
 
 
-class neuron:
+class Neuron:
     """A class to help manage a single neuron from a SOM
     
     TODO: Add proper returns to documentation
@@ -539,3 +664,75 @@ class Annotation():
         data['dims'] = self.neuron_dims
 
         return data
+
+    def transform_neuron(self, transform: tuple= None, channel: int=0):
+        """Given a PINK transform, apply it to save images. 
+        
+        Arguments:
+            transform {tuple} -- [PINK transform information
+        
+        Keyword Arguments:
+            channel {int} -- Which channel to return. (default: {0})
+        """
+        if transform is None:
+            transform = (0,0)
+        flip, angle = transform
+
+        # Pink version < 1 transposes neurons. Fortran/C mismatch.
+        img = self.neurons[channel].T
+
+        if flip == 1:
+            img = img[::-1,:]
+
+        # Scipy ndimage rotate goes anticlockwise. PINK goes
+        # clockwise
+        img = img_rotate(img, np.rad2deg(-angle), reshape=False)
+        
+        return img
+
+    def transform_clicks(self, transform: tuple= None, channel: int=0, center: bool=True):
+        """Transform saved click information following PINK produced
+        transform matix
+        
+        TODO: When overlaying NONTRANSFORMED clicks onto neuron they
+              the ax.plot() has to reverse the x/y, i.e. ax.plot(c[1],c[0])
+              This does NOT need to be done for TRANSFORMED points. Not
+              sure why.
+
+        Keyword Arguments:
+            transform {tuple} -- PINK produced transform (flip, angle). (default: {None})
+            channel {int} -- Channel whose clicks to return (default: {0})
+            center {bool} -- Do rotation around image center (default: {True})
+        """
+        if transform is None:
+            transform = (0,0)
+
+        clicks = self.clicks[channel]
+        neuron_dim = self.neuron_dims[channel]
+        flip, angle = transform
+
+        # Clicks stored in (x, y) format. Need to switch to (y, x)
+        # for consistency
+        clicks = [(c[1], c[0]) for c in clicks]
+
+        if center:
+            clicks = [(c[0] - neuron_dim[0]/2, c[1] - neuron_dim[1]/2) for c in clicks]
+
+        trans_clicks = []
+        for c in clicks:
+            off_y, off_x = c
+
+            if flip == 1:
+                off_x = -off_x
+                # off_y = -off_y
+
+            trans_y = off_y*np.cos(angle) - off_x*np.sin(angle)
+            trans_x = off_y*np.sin(angle) + off_x*np.cos(angle)
+
+            trans_clicks.append( (trans_y, trans_x) )
+        
+        return trans_clicks
+
+
+
+

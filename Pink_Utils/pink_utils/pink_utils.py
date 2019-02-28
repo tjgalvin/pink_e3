@@ -147,13 +147,14 @@ class heatmap:
         """Helper to open a persistent filedescriptor. Will always start
         at beginning of file
         """
-        if self.fd is None:
-            self.fd = open(self.path, 'rb')
+        # if self.fd is None:
+        #     self.fd = open(self.path, 'rb')
+        fd = open(self.path, 'rb')
         
         # Skip PINK header if it exists
-        self.fd.seek(self.offset)
+        fd.seek(self.offset)
 
-        return self.fd
+        return fd
 
     @property
     def file_head(self):
@@ -278,13 +279,15 @@ class transform:
         """Helper to open a persistent filedescriptor. Will always start
         at beginning of file
         """
-        if self.fd is None:
-            self.fd = open(self.path, 'rb')
+        # if self.fd is None:
+        #     self.fd = open(self.path, 'rb')
+        
+        fd = open(self.path, 'rb')
         
         # Skip PINK header if it exists
-        self.fd.seek(self.offset, 0)
+        fd.seek(self.offset, 0)
 
-        return self.fd
+        return fd
 
     @property
     def file_head(self):
@@ -430,14 +433,7 @@ class som:
         self.path = path
         self.fd = None # File descriptor to access if needed
         self.header_info = None
-        self.offset = 0
-
-        # Skip the PINK header information
-        with open(self.path, 'rb') as fd:
-            for line in fd:
-                if not line.startswith(b'#'):
-                    self.offset == fd.tell()
-                    break
+        self.offset = header_offset(self.path)
 
         self.data = None                
 
@@ -446,13 +442,15 @@ class som:
         """Helper to open a persistent filedescriptor. Will always start
         at beginning of file
         """
-        if self.fd is None:
-            self.fd = open(self.path, 'rb')
+        # if self.fd is None:
+        #     self.fd = open(self.path, 'rb')
         
-        # Skip PINK header if it exists
-        self.fd.seek(self.offset)
+        fd = open(self.path, 'rb')
 
-        return self.fd
+        # Skip PINK header if it exists
+        fd.seek(self.offset)
+
+        return fd
 
 
     @property
@@ -498,7 +496,6 @@ class som:
             data = np.reshape(data, (image_height, numberOfChannels, image_width))
 
             self.data = data
-        
         else:
             data = self.data
 

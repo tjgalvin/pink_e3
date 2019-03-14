@@ -31,7 +31,9 @@ def segment_data(data: np.ndarray, no_segs: int):
         no_segs {int} -- [description]
     """
     sort_idx = np.argsort(data)
+    print(sort_idx.shape, no_segs, type(no_segs))
     split_idx = np.array_split(sort_idx, no_segs)
+
 
     return split_idx
 
@@ -95,11 +97,11 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    ed = pu.heatmap(args.similarity)
-    imgs = pu.image_binary(args.image_binary)
-    df = pd.read_csv(args.catalog)
-    base_out = args.base_out
-    no_segs = args.no_segs
+    ed = pu.heatmap(args.similarity[0])
+    imgs = pu.image_binary(args.image_binary[0])
+    df = pd.read_csv(args.catalog[0])
+    base_out = args.base_out[0]
+    no_segs = int(args.no_segs[0])
 
     segment(ed, imgs, df, base_out, no_segs)
 

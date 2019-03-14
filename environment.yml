@@ -13,5 +13,5 @@ dependencies:
   - scikit-learn=0.20.0
   - scipy=1.1.0
   - tqdm=4.26.0
-prefix: /Users/gal16b/miniconda3/envs/pink_e3
+
 

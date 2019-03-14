@@ -50,7 +50,7 @@ def write_segments(split_idx: np.ndarray, base_out: str, imgs: pu.image_binary,
     """
     for count, idxs in enumerate(split_idx):
         pu.segment_image_bin(imgs, idxs, f"{base_out}_Seg{count}.bin")
-        sub_df = cata[idxs]
+        sub_df = cata.loc[idxs]
 
         sub_df.to_csv(f"{base_out}_Seg{count}.csv")
 

@@ -590,7 +590,7 @@ def segment_image_bin(imgs: image_binary, idxs: np.ndarray, out: str):
         of.write(struct.pack('i', base_head[2]))
         of.write(struct.pack('i', base_head[3]))
         
-        for idx in idxs:
+        for idx in tqdm(idxs):
             d = imgs.get_index_dump(idx)
             d.astype('f').tofile(of)
 

@@ -20,98 +20,6 @@ from collections import defaultdict
 
 __author__ = 'Tim Galvin'
 
-# ------------------------------------------------------------------------------
-# Image manipulation
-# ------------------------------------------------------------------------------
-
-def zoom(img, in_y, in_x):
-    diff_x = in_x // 2
-    diff_y = in_y // 2
-    
-    cen_x = img.shape[1] // 2
-    cen_y = img.shape[0] // 2
-    
-    return img[cen_y-diff_y:cen_y+diff_y,
-               cen_x-diff_x:cen_x+diff_x]
-
-# ------------------------------------------------------------------------------
-
-
-# ------------------------------------------------------------------------------
-# Position SkyCoord related tasks
-# ------------------------------------------------------------------------------
-
-def estimate_position(pos: SkyCoord, dx: int, dy: int, pix_scale: u= 1*u.arcsec):
-    """Calculate a RA/Dec position given a central position and offsets. 
-    
-    Arguments:
-        pos {SkyCoord} -- Position offsets are relative from
-        dx {int} -- 'RA' pixel offsets
-        dy {int} -- 'Dec' pixel offsets
-        pix_scale {u} -- Pixel scale. Assume square pixels. 
-    """
-    # Turn pixel offsets to angular
-    dx *= pix_scale
-    dy *= pix_scale
-
-    # RA increases right to left
-    dx = -dx
-    
-    new_frame = SkyOffsetFrame(origin=pos)
-    new_pos = SkyCoord(lon=dx, lat=dy, frame=new_frame)
-    
-    return new_pos.transform_to(ICRS)
-
-    # # Turn pixel offsets to angular
-    # dx = dx * pix_scale * np.cos(pos.dec.radian)
-    # dy *= pix_scale
-
-    # # Obtain relative position. RA on sky increases right to left. 
-    # # Think there is a cos(dec) term in here that needs to be handled?
-    # offset_pos = SkyCoord(pos.ra - dx, pos.dec + dy)
-
-    # return offset_pos
-
-
-def great_circle_offsets(pos1: SkyCoord, pos2: SkyCoord, pix_scale: u=None):
-    """Compute the great circle offsets between two points. Transform to 
-    pixel offsets if a pix_scale is given. 
-
-    TODO: Add center keyword
-    TODO: Allow rectangular pixels
-    
-    Arguments:
-        pos1 {SkyCoord} -- First position
-        pos2 {SkyCoord} -- Second position
-    
-    Keyword Arguments:
-        pix_scale {u} -- Pixel scale used to transform to pixel dimensions (default: {None})
-    """
-
-    offsets = pos1.spherical_offsets_to(pos2)
-
-    if pix_scale is None:
-        return pix_scale
-    
-    # In pixel space, RA increases right to left
-    offsets = (-(offsets[0].to(u.arcsecond)/pix_scale.to(u.arcsecond)), 
-                (offsets[1].to(u.arcsecond)/pix_scale.to(u.arcsecond)))
-
-    return offsets
-
-# ------------------------------------------------------------------------------
-
-def no_ticks(ax):
-    '''Disable ticks
-    '''
-    try:
-        for a in ax:
-            a.get_xaxis().set_visible(False)
-            a.get_yaxis().set_visible(False)
-    except TypeError:
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-
 
 def header_offset(path):
     """Determine the offset required to ignore the header information
@@ -382,6 +290,7 @@ class transform:
 
         return flip, ro
 
+
 class image_binary:
     '''Helper to interact with a heatmap output
     '''
@@ -415,6 +324,25 @@ class image_binary:
             data = np.ndarray([width,height], 'float', array)
 
             return data
+
+
+    def get_index_dump(self, index: int):
+        """Reterive the raw floats from an image binary for the given index. 
+        
+        Arguments:
+            index {int} -- Index of image data to copy
+        """
+        with open(self.path, 'rb') as f:
+            no_images, no_channels, width, height = struct.unpack('i' * 4, f.read(4 * 4))
+            if index > no_images:
+                return None
+            
+            size = width * height * no_channels
+            f.seek(4*4 + self.offset + (index * size * 4))
+            array = np.array(struct.unpack('f' * size, f.read(size*4)))
+
+            return array
+
 
     @property
     def file_head(self):
@@ -524,106 +452,6 @@ class som:
         return d.copy()
 
 
-class Neuron:
-    """A class to help manage a single neuron from a SOM
-    
-    TODO: Add proper returns to documentation
-    """
-    def __init__(self, img: np.ndarray, pixel_scale: u = 1*u.arcsec, mask:list = None):
-        """Create a new instance of the class
-        
-        img {numpy.ndarray} : The image of the neuron extracted
-        """
-        
-        self.img = img
-        self.pixel_scale = pixel_scale
-        self.mask = mask # Expecting to apply some type of masking operation at somepoint
-                         # Presumably some type of list?
-        
-    def apply_mask(self, img:np.ndarray=None):
-        """Stub function. If a masking operation has to be applied do it here
-        """
-        
-        if img is None:
-            img = self.img.copy()
-        
-        if self.mask is None:
-            return img
-
-        # Assume a list of (y, x) to (y, x) as a bounding box?
-        # Relative to center position
-        grid = np.mgrid[0:img.shape[0], 0:img.shape[1]]
-        for m in self.mask:
-            v1, v2 = m
-            y1, x1 = v1
-            y2, x2 = v2
-
-            mask = ((y1 < grid[0]) & (grid[0] < y2) & (x1 < grid[1]) & (grid[1] < x2))
-            img[~mask] = img[mask].min()
-
-        return img
-    
-    def crop(self, size: tuple, img: np.ndarray=None):
-        """Crop neuron or transform to desired size
-        
-        size {tuple}: size of region (y, x)
-        img {np.ndarray}: The image to crop. If none use the raw neuron
-        """
-        if img is None:
-            img = self.img
-            
-        y, x = img.shape
-        in_y, in_x = size
-
-        start_x = x//2-(in_x//2)
-        start_y = y//2-(in_y//2)
-
-        return img[start_y:start_y+in_y,start_x:start_x+in_x]
-
-    def transform(self, transform: tuple, size: tuple=None, mask: bool=False):
-        """Rotate the image of neuron according to the transform
-        
-        transform {tuple}: tuple of the form (flip, angle) with angle in radians
-        size {tuple}: size of the output image to crop
-        mask {bool} : apply masking operation
-        """
-        
-        # Apply mask first, so the mask does not have to be transformed as well
-        if mask:
-            img_trans = self.apply_mask()
-        else:
-            img_trans = self.img.copy()
-
-        flip, angle = transform
-        
-        img_trans = sci_rotate(img_trans, -np.rad2deg(angle), reshape=False)
-        if flip == 1:
-            img_trans = img_trans[:,::-1]
-        
-        if size is not None:
-            img_trans = self.crop(size, img=img_trans)
-        
-        return img_trans
-    
-    def argmax(self, transform: tuple=None, size: np.ndarray=None, mask: bool=False):
-        """Return the position of the maximum pixel. Apply transform and cropping
-        if specified
-        
-        transform {tuple}: tuple of the form (flip, angle) with angle in radians
-        pixel_scale {astropy.units}: size of the pixels. Supports square pixels only
-        mask {bool} : apply masking operation
-        """
-        
-        if transform is not None:
-            img = self.transform(transform, size=size, mask=mask)
-        else:
-            img = self.img
-        
-        pos = np.unravel_index(np.argmax(img), img.shape)
-        
-        return pos
-
-
 class Annotation():
     """Structure to save annotated positions and other information
     """
@@ -671,12 +499,13 @@ class Annotation():
         Keyword Arguments:
             channel {int} -- Which channel to return. (default: {0})
         """
-        if transform is None:
-            transform = (0,0)
-        flip, angle = transform
-
         # Pink version < 1 transposes neurons. Fortran/C mismatch.
         img = self.neurons[channel].T
+
+        if transform is None:
+            return img
+
+        flip, angle = transform
 
         if flip == 1:
             img = img[::-1,:]
@@ -687,7 +516,8 @@ class Annotation():
         
         return img
 
-    def transform_clicks(self, transform: tuple= None, channel: int=0, center: bool=True):
+    def transform_clicks(self, transform: tuple= None, channel: int=0, center: bool=True, 
+                        order: bool=False):
         """Transform saved click information following PINK produced
         transform matix
         
@@ -700,20 +530,26 @@ class Annotation():
             transform {tuple} -- PINK produced transform (flip, angle). (default: {None})
             channel {int} -- Channel whose clicks to return (default: {0})
             center {bool} -- Do rotation around image center (default: {True})
+            order {bool} -- Order the clicks from closest to centre to furthest (default: {False})
         """
-        if transform is None:
-            transform = (0,0)
 
-        clicks = self.clicks[channel]
+        clicks = self.clicks[channel].copy()
         neuron_dim = self.neuron_dims[channel]
-        flip, angle = transform
 
         # Clicks stored in (x, y) format. Need to switch to (y, x)
         # for consistency
         clicks = [(c[1], c[0]) for c in clicks]
 
+        if order:
+            clicks = sorted(clicks, key=lambda c: np.sqrt((c[0] - neuron_dim[0]/2)**2. + (c[1] - neuron_dim[1]/2)**2. ))
+            
         if center:
             clicks = [(c[0] - neuron_dim[0]/2, c[1] - neuron_dim[1]/2) for c in clicks]
+
+        if transform is None:
+            return clicks
+
+        flip, angle = transform
 
         trans_clicks = []
         for c in clicks:
@@ -731,5 +567,123 @@ class Annotation():
         return trans_clicks
 
 
+# ------------------------------------------------------------------------------
+# Image binary segmenting
+# ------------------------------------------------------------------------------
+def segment_image_bin(imgs: image_binary, idxs: np.ndarray, out: str):
+    """Function to create a new binary file given an existing
+    binary file and a list of indicies to copy across. No changes
+    to image type of shapes are possible
+    
+    Arguments:
+        imgs {image_binary} -- Images binary to copy images from
+        idxs {np.ndarray} -- Indicies to copy selected with some method
+        out {str} -- Name of the new pink file to create
+    """
+    base_head = imgs.file_head
+
+    with open(f"{out}", 'wb') as of:
+        of.write(struct.pack('i', len(idxs)))
+        of.write(struct.pack('i', base_head[1]))
+        of.write(struct.pack('i', base_head[2]))
+        of.write(struct.pack('i', base_head[3]))
+        
+        for idx in idxs:
+            d = imgs.get_index_dump(idx)
+            d.astype('f').tofile(of)
+
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Image manipulation
+# ------------------------------------------------------------------------------
+
+def zoom(img, in_y, in_x):
+    diff_x = in_x // 2
+    diff_y = in_y // 2
+    
+    cen_x = img.shape[1] // 2
+    cen_y = img.shape[0] // 2
+    
+    return img[cen_y-diff_y:cen_y+diff_y,
+               cen_x-diff_x:cen_x+diff_x]
+
+# ------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------
+# Position SkyCoord related tasks
+# ------------------------------------------------------------------------------
+
+def estimate_position(pos: SkyCoord, dx: int, dy: int, pix_scale: u= 1*u.arcsec):
+    """Calculate a RA/Dec position given a central position and offsets. 
+    
+    Arguments:
+        pos {SkyCoord} -- Position offsets are relative from
+        dx {int} -- 'RA' pixel offsets
+        dy {int} -- 'Dec' pixel offsets
+        pix_scale {u} -- Pixel scale. Assume square pixels. 
+    """
+    # Turn pixel offsets to angular
+    dx *= pix_scale
+    dy *= pix_scale
+
+    # RA increases right to left
+    dx = -dx
+    
+    new_frame = SkyOffsetFrame(origin=pos)
+    new_pos = SkyCoord(lon=dx, lat=dy, frame=new_frame)
+    
+    return new_pos.transform_to(ICRS)
+
+    # # Turn pixel offsets to angular
+    # dx = dx * pix_scale * np.cos(pos.dec.radian)
+    # dy *= pix_scale
+
+    # # Obtain relative position. RA on sky increases right to left. 
+    # # Think there is a cos(dec) term in here that needs to be handled?
+    # offset_pos = SkyCoord(pos.ra - dx, pos.dec + dy)
+
+    # return offset_pos
+
+
+def great_circle_offsets(pos1: SkyCoord, pos2: SkyCoord, pix_scale: u=None):
+    """Compute the great circle offsets between two points. Transform to 
+    pixel offsets if a pix_scale is given. 
+
+    TODO: Add center keyword
+    TODO: Allow rectangular pixels
+    
+    Arguments:
+        pos1 {SkyCoord} -- First position
+        pos2 {SkyCoord} -- Second position
+    
+    Keyword Arguments:
+        pix_scale {u} -- Pixel scale used to transform to pixel dimensions (default: {None})
+    """
+
+    offsets = pos1.spherical_offsets_to(pos2)
+
+    if pix_scale is None:
+        return pix_scale
+    
+    # In pixel space, RA increases right to left
+    offsets = (-(offsets[0].to(u.arcsecond)/pix_scale.to(u.arcsecond)), 
+                (offsets[1].to(u.arcsecond)/pix_scale.to(u.arcsecond)))
+
+    return offsets
+
+# ------------------------------------------------------------------------------
+
+def no_ticks(ax):
+    '''Disable ticks
+    '''
+    try:
+        for a in ax:
+            a.get_xaxis().set_visible(False)
+            a.get_yaxis().set_visible(False)
+    except TypeError:
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
 
 

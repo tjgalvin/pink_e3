@@ -580,6 +580,8 @@ def segment_image_bin(imgs: image_binary, idxs: np.ndarray, out: str):
         idxs {np.ndarray} -- Indicies to copy selected with some method
         out {str} -- Name of the new pink file to create
     """
+    from tqdm import tqdm
+
     base_head = imgs.file_head
 
     with open(f"{out}", 'wb') as of:

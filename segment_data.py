@@ -31,7 +31,6 @@ def segment_data(data: np.ndarray, no_segs: int):
         no_segs {int} -- [description]
     """
     sort_idx = np.argsort(data)
-    print(sort_idx.shape, no_segs, type(no_segs))
     split_idx = np.array_split(sort_idx, no_segs)
 
 

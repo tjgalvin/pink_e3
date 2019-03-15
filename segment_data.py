@@ -164,6 +164,7 @@ if __name__ == '__main__':
     parser.add_argument('base_out', help="Base path for output files (segment and file type appended)", nargs=1)
     parser.add_argument('--no_segs', help="Number of segments to split against based on the BMU scores", nargs=1, default=None)
     parser.add_argument('--min_edge', help="Minimum edge to define a link using CONNvis", nargs=1, default=None)
+    parser.add_argument('--write', help='Write out the segment files', default=False, action='store_true')
     
     args = parser.parse_args()
 
@@ -175,9 +176,12 @@ if __name__ == '__main__':
     imgs = pu.image_binary(args.image_binary[0])
     df = pd.read_csv(args.catalog[0])
     base_out = args.base_out[0]
-    no_segs = int(args.no_segs[0])
+    no_segs = int(args.no_segs[0]) if args.no_segs[0] is not None else None
+    min_edge = int(args.min_edge[0]) if args.min_edge[0] is not None else None
 
-    segment(ed, imgs, df, base_out, no_segs)
+    write = args.write
+
+    segment(ed, imgs, df, base_out, no_segs=no_segs, min_edge=min_edge, write=write)
 
 
 

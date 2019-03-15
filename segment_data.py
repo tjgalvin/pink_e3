@@ -52,14 +52,28 @@ def connvis_clusters(ed: pu.heatmap, min_edge: float=0.1):
         val = v/max_val
         if val > 0.15:
             G.add_edge(k[0], k[1], weight=val)
-    
+        else:
+            G.add_nodes_from(k)   
+ 
     subs = [G.subgraph(c) for c in nx.connected_components(G)]
 
     split_idx = []
-    for s in subs:
-        keys = np.array([k for k in s.nodes.keys()])
-        split_idx.append(np.argwhere(np.in1d(sort[:,0], keys ) )[0] )
+    small_clusters = []
+    nodes = []
 
+    for s in subs:
+        nodes += [k for k in s.nodes.keys()]
+        keys = np.array([k for k in s.nodes.keys()])
+        idxs = np.argwhere(np.in1d(sort[:,0], keys ) ).flatten()
+        if len(keys) < 5:
+            small_clusters.extend(idxs.tolist())
+        else:
+            split_idx.append(idxs)
+
+    split_idx.append(np.array(small_clusters))
+
+    print(sum([len(k) for k in split_idx]))
+    print(len(nodes))
     return split_idx
 
 

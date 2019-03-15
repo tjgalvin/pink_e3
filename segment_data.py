@@ -170,7 +170,8 @@ if __name__ == '__main__':
 
     if args.no_segs[0] is None and args.min_edge[0] is None:
         print('A segmentation method has to be set. ')
-        return
+        import sys
+        sys.exit(1)
 
     ed = pu.heatmap(args.similarity[0])
     imgs = pu.image_binary(args.image_binary[0])

@@ -168,7 +168,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    if args.no_segs[0] is None and args.min_edge[0] is None:
+    if args.no_segs is None and args.min_edge is None:
         print('A segmentation method has to be set. ')
         import sys
         sys.exit(1)

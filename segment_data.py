@@ -177,8 +177,8 @@ if __name__ == '__main__':
     imgs = pu.image_binary(args.image_binary[0])
     df = pd.read_csv(args.catalog[0])
     base_out = args.base_out[0]
-    no_segs = int(args.no_segs[0]) if args.no_segs[0] is not None else None
-    min_edge = int(args.min_edge[0]) if args.min_edge[0] is not None else None
+    no_segs = int(args.no_segs[0]) if args.no_segs is not None else None
+    min_edge = int(args.min_edge[0]) if args.min_edge is not None else None
 
     write = args.write
 

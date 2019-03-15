@@ -123,7 +123,7 @@ def create_splits(ed: pu.heatmap, no_segs: int=None, min_edge: float=None):
         scores = bmu_score(ed)
         split_idx = segment_data(scores, no_segs)
     elif min_edge is not None:
-        split_idx = None
+        split_idx = connvis_clusters(ed, min_edge=min_edge)
 
     return split_idx
 

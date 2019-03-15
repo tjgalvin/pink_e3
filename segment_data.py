@@ -58,9 +58,8 @@ def connvis_clusters(ed: pu.heatmap, min_edge: float=0.1):
     split_idx = []
     for s in subs:
         keys = np.array([k for k in s.nodes.keys()])
-        split_idx.append(np.argwhere(np.in1d(sort[:,0], keys ) ))
+        split_idx.append(np.argwhere(np.in1d(sort[:,0], keys ) )[0] )
 
-    print(split_idx)
     return split_idx
 
 
@@ -92,6 +91,7 @@ def write_segments(split_idx: np.ndarray, base_out: str, imgs: pu.image_binary,
         cata {pd.DataFrame} -- Catalogue of source information that accompanies imgs
     """
     for count, idxs in enumerate(split_idx):
+        print(idxs.shape)
         pu.segment_image_bin(imgs, idxs, f"{base_out}_Seg{count}.bin")
         sub_df = cata.loc[idxs]
 

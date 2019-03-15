@@ -50,7 +50,7 @@ def connvis_clusters(ed: pu.heatmap, min_edge: float=0.1):
     
     for k, v in links.items():
         val = v/max_val
-        if val > 0.15:
+        if val > min_edge:
             G.add_edge(k[0], k[1], weight=val)
         else:
             G.add_nodes_from(k)   

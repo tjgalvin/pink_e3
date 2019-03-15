@@ -2,8 +2,10 @@ import pink_utils as pu
 import numpy as np
 import pandas as pd
 import argparse
+import networkx as nx
 from tqdm import tqdm
 from scipy.stats import percentileofscore
+from collections import defaultdict
 
 def bmu_score(ed: pu.heatmap):
     """Produce the BMU scores for all sources in the heatmap instance
@@ -18,6 +20,48 @@ def bmu_score(ed: pu.heatmap):
         bmu_scores.append( percentileofscore(ed.data[:,hm[0], hm[1]], ed.data[i, hm[0], hm[1]]) )
 
     return np.array(bmu_scores)
+
+
+def connvis_clusters(ed: pu.heatmap, min_edge: float=0.1):
+    """Produce clusters based on the CONNvis method
+    
+    Arguments:
+        ed {pu.heatmap} -- Instance linking to a PINK mapping
+
+    Keyword Arguments:
+        min_edge {float} -- Minimum weighted value to retain an edge {Default: 0.1}
+    """
+    data = ed.data
+    data = data.reshape((data.shape[0], np.prod(data.shape[1:])))
+
+    sort = np.argsort(data, axis=1)
+    links = defaultdict(float)
+
+    for i in sort[:]:
+        for x, y in zip(i[:-1], i[1:]):
+            # Order of a link do not matter
+            if y > x:
+                x, y = y, x
+            links[(x,y)] += 1.
+    
+    max_val = max(links.values())
+
+    G = nx.Graph()
+    
+    for k, v in links.items():
+        val = v/max_val
+        if val > 0.15:
+            G.add_edge(k[0], k[1], weight=val)
+    
+    subs = [G.subgraph(c) for c in nx.connected_components(G)]
+
+    split_idx = []
+    for s in subs:
+        keys = np.array([k for k in s.nodes.keys()])
+        split_idx.append(np.argwhere(np.in1d(sort[:,0], keys ) ))
+
+    print(split_idx)
+    return split_idx
 
 
 def segment_data(data: np.ndarray, no_segs: int):
@@ -64,8 +108,28 @@ def save_segment_idxs(split_idx: np.ndarray, base_out: str):
     np.save(f"{base_out}_Seg_IDX.npy", split_idx)
 
 
+def create_splits(ed: pu.heatmap, no_segs: int=None, min_edge: float=None):
+    """Create the arg idxs to split the image samples against
+    
+    Arguments:
+        ed {pu.heatmap} -- PINK produced similarity matrix
+        
+    Keywprd Arguments
+        no_segs {int} -- Number of desired segments. Implicitly sets mode to `bmuscore` (Default: {None})
+        min_edge {float} -- Minimum edge for CONNvis. Implicitly sets mode to `connvis` (Default: {None})
+    """
+
+    if no_segs is not None:
+        scores = bmu_score(ed)
+        split_idx = segment_data(scores, no_segs)
+    elif min_edge is not None:
+        split_idx = None
+
+    return split_idx
+
+
 def segment(ed: pu.heatmap, imgs: pu.image_binary, cata: pd.DataFrame,
-            base_out: str, no_segs: int):
+            base_out: str, no_segs: int=None, min_edge: float=None, write: bool=True):
     """Perform segmenting of items
     
     Arguments:
@@ -73,14 +137,20 @@ def segment(ed: pu.heatmap, imgs: pu.image_binary, cata: pd.DataFrame,
         imgs {pu.image_binary} -- Images that accompany the ed
         cata {pd.DataFrame} -- Catalogue of sources for imgs/ed
         base_out {str} -- Base output name
-        no_segs {int} -- Number of segments
+    
+    Keyword Arguments
+        no_segs {int} -- Number of segments (Default: {None})
+        min_edge {int} -- Minimum edge required for CONNvis clustering (Default: {None})
+        write {bool} -- Whether to write out the segments (Default: {True})
     """
+    split_idx = create_splits(ed, no_segs=no_segs, min_edge=min_edge)
 
-    scores = bmu_score(ed)
-    split_idx = segment_data(scores, no_segs)
+    if split_idx is None:
+        return
 
-    write_segments(split_idx, base_out, imgs, df)
-    save_segment_idxs(split_idx, base_out)
+    if write:
+        write_segments(split_idx, base_out, imgs, df)
+        save_segment_idxs(split_idx, base_out)
 
 
 if __name__ == '__main__':
@@ -92,9 +162,14 @@ if __name__ == '__main__':
                         nargs=1)
     parser.add_argument('catalog', help='Catalogue that accompanies the image_binary', nargs=1)
     parser.add_argument('base_out', help="Base path for output files (segment and file type appended)", nargs=1)
-    parser.add_argument('no_segs', help="Number of segments to split against", nargs=1)
+    parser.add_argument('--no_segs', help="Number of segments to split against based on the BMU scores", nargs=1, default=None)
+    parser.add_argument('--min_edge', help="Minimum edge to define a link using CONNvis", nargs=1, default=None)
     
     args = parser.parse_args()
+
+    if args.no_segs[0] is None and args.min_edge[0] is None:
+        print('A segmentation method has to be set. ')
+        return
 
     ed = pu.heatmap(args.similarity[0])
     imgs = pu.image_binary(args.image_binary[0])

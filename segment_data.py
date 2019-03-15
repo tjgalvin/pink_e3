@@ -173,12 +173,15 @@ if __name__ == '__main__':
         import sys
         sys.exit(1)
 
+    print('Loading Heatmap...')
     ed = pu.heatmap(args.similarity[0])
+    print('Loading images...')
     imgs = pu.image_binary(args.image_binary[0])
+    print('Loading catalogue')
     df = pd.read_csv(args.catalog[0])
     base_out = args.base_out[0]
     no_segs = int(args.no_segs[0]) if args.no_segs is not None else None
-    min_edge = int(args.min_edge[0]) if args.min_edge is not None else None
+    min_edge = float(args.min_edge[0]) if args.min_edge is not None else None
 
     write = args.write
 

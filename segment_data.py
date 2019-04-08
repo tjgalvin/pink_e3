@@ -2,6 +2,7 @@ import pink_utils as pu
 import numpy as np
 import pandas as pd
 import argparse
+import sys
 import networkx as nx
 from tqdm import tqdm
 from scipy.stats import percentileofscore
@@ -22,7 +23,7 @@ def bmu_score(ed: pu.heatmap):
     return np.array(bmu_scores)
 
 
-def connvis_clusters(ed: pu.heatmap, min_edge: float=0.1):
+def connvis_clusters(ed: pu.heatmap, min_edge: float=0.1, log: bool=False):
     """Produce clusters based on the CONNvis method
     
     Arguments:
@@ -30,6 +31,7 @@ def connvis_clusters(ed: pu.heatmap, min_edge: float=0.1):
 
     Keyword Arguments:
         min_edge {float} -- Minimum weighted value to retain an edge {Default: 0.1}
+        log {bool} -- Log the edges (default: False)
     """
     data = ed.data
     data = data.reshape((data.shape[0], np.prod(data.shape[1:])))
@@ -44,6 +46,10 @@ def connvis_clusters(ed: pu.heatmap, min_edge: float=0.1):
                 x, y = y, x
             links[(x,y)] += 1.
     
+    if log:
+        for k, v in links.items():
+            links[k] = np.log10(v)
+
     max_val = max(links.values())
 
     G = nx.Graph()
@@ -184,7 +190,9 @@ if __name__ == '__main__':
 
     if args.no_segs is None and args.min_edge is None:
         print('A segmentation method has to be set. ')
-        import sys
+        sys.exit(1)
+    elif args.no_segs is not None and args.min_edge is not None:
+        print('Only a single segmentation mathod can be set. ')
         sys.exit(1)
 
     print('Loading Heatmap...')

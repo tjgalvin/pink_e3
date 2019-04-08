@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """It appears that when using a gaussian as a neighbourhood function
 PINK does not normalise the peak to one. This cause the weighting
 updates to behave in a difficult to predict manner, especially in
@@ -34,11 +35,13 @@ def plot_update(sigma: list, lr: list, scale_lr: list):
         ax.axhline(l, ls='-')
         ax2.axhline(l, ls='--')
 
+    # hack to make sure plot data from ax2 two not placed over
+    # legend of ax
     leg = ax.legend(loc='upper left', title='Uncorrected', framealpha=1.)
     leg.remove()
     ax2.legend(loc='upper right', title='Corrected', framealpha=1.)
     ax2.add_artist(leg)
-    
+
     ax.set(ylabel='Uncorrected Weighting', xlabel='Neuron distance')
     ax2.set(ylabel='Corrected Weighting')
 
@@ -68,7 +71,7 @@ def scale(sigma: list, lr: list, plot: bool=False):
         scale_lr.append( l / peak)
     
     if plot:
-        print('plotting')
+        print('Plotting...')
         plot_update(sigma, lr, scale_lr)
 
     print("Desired_LR: sigma effective_LR")

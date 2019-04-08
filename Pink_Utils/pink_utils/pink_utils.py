@@ -14,10 +14,11 @@ import numpy as np
 import pandas as pd
 import struct
 import astropy.units as u
+import networkx as nx
 from astropy.coordinates import SkyCoord, SkyOffsetFrame, ICRS
 from scipy.ndimage import rotate as img_rotate
 from collections import defaultdict
-
+from tqdm import tqdm
 __author__ = 'Tim Galvin'
 
 
@@ -84,7 +85,49 @@ class heatmap:
         return self.header_info
 
 
-    def _read_data(self):
+    def _read_data(self, chunk_size=32768):
+        """Function to read in the data upon creating the heatmap. Rewritten to 
+        get over a seemingly hard limit to file size that can be read in in one
+        call. Fustrating.
+        """
+        # Get file handler seeked to after the header
+        f = self.f
+
+        # no_images, som_width, som_height, som_depth = struct.unpack('i' * 4, f.read(4*4))
+        no_images, som_width, som_height, som_depth = self.details
+
+        size = som_width * som_height * som_depth
+        image_width = som_width
+        image_height = som_depth * som_height
+
+        f.seek(4*4, 0)
+        data = np.zeros((no_images, image_height, image_width), dtype=np.float32)
+
+        for i in tqdm(range(no_images)):
+            darr = np.array(struct.unpack('f' * size, f.read(size*4)))
+            d = np.ndarray([som_width, som_height, som_depth], 'float', darr)
+            d = np.swapaxes(d, 0, 2)
+            d = np.reshape(d, (image_height, image_width))
+            data[i] = d
+
+        return data
+
+
+        data = []
+        # A nicer approach for large heatmaps in terms of memory usage
+        for i in tqdm(range(no_images)):
+            darr = np.array(struct.unpack('f' * size, f.read(size*4)))
+            d = np.ndarray([som_width, som_height, som_depth], 'float', darr)
+            d = np.swapaxes(d, 0, 2)
+            d = np.reshape(d, (image_height, image_width))
+            data.append(d)
+
+        data = np.array(data, dtype=np.float32)
+        
+        return data
+
+
+    def _read_data_original(self):
         """Function to read in the data upon creating the heatmap
         """
         # Get file handler seeked to after the header
@@ -149,6 +192,7 @@ class heatmap:
 
         return pos_min
 
+
     def get_bmu_ed(self, index: int):
         """Return the ED of the best matching neuron
         
@@ -159,7 +203,6 @@ class heatmap:
         """
 
         return np.min(self.ed(index=index))
-
 
 
 class transform:
@@ -546,6 +589,12 @@ class Annotation():
         if center:
             clicks = [(c[0] - neuron_dim[0]/2, c[1] - neuron_dim[1]/2) for c in clicks]
 
+            try:
+                clicks = [(c[0] + center[0]/2, c[1] + center[1]/2) for c in clicks]
+            except:
+                pass
+
+
         if transform is None:
             return clicks
 
@@ -689,3 +738,52 @@ def no_ticks(ax):
         ax.get_yaxis().set_visible(False)
 
 
+def connvis_graph(ed: heatmap, min_edge: float=0.0, full: bool=False, log: bool=False):
+    """Produce a graph based on the CONNvis method
+    
+    Arguments:
+        ed {pu.heatmap} -- Instance linking to a PINK mapping
+
+    Keyword Arguments:
+        min_edge {float} -- Minimum weighted value to retain an edge {Default: 0.0}
+        full {bool} -- If True, use the entire set of ordered neurons when building links or just the
+                       first and second (deafult: {False})
+        log {bool} -- Log the link edges (default: {False})
+    """
+    data = ed.data
+    data = data.reshape((data.shape[0], np.prod(data.shape[1:])))
+
+    sort = np.argsort(data, axis=1)
+    links = defaultdict(float)
+
+    for i in sort[:]:
+        if full:
+            for x, y in zip(i[:-1], i[1:]):
+            # Order of a link do not matter
+                if y > x:
+                    x, y = y, x
+                links[(x,y)] += 1.
+        else:
+            x = i[0]
+            y = i[1]
+            # Order of a link do not matter
+            if y > x:
+                x, y = y, x
+            links[(x,y)] += 1.
+
+    if log:
+        for k, v in links.items():
+            links[k] = np.log10(v)
+
+    max_val = max(links.values())
+
+    G = nx.Graph()
+    
+    for k, v in links.items():
+        val = v/max_val
+        if val > min_edge:
+            G.add_edge(k[0], k[1], weight=1.01 - val)#, dist=val)
+        else:
+            G.add_nodes_from(k)   
+ 
+    return G

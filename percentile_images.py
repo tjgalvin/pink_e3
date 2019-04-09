@@ -85,4 +85,4 @@ if __name__ == '__main__':
     base = args.base_out[0]
 
 
-    perc(som, ed, images, levels=levels)
+    perc(som, ed, imgs, levels=levels)

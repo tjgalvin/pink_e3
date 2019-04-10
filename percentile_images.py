@@ -72,6 +72,10 @@ def perc(som: pu.som, ed: pu.heatmap, imgs:pu.image_binary, base_out:str, levels
         # argmask = (argmin[0] == coord[0]) & (argmin[1] == coord[1])
         argmask = np.argwhere((argmin[0] == coord[0]) & (argmin[1] == coord[1]))[:, 0]
 
+        # No matching BMU sources
+        if len(argmask) == 0:
+            continue
+
         data = ed.data[argmask, coord[0], coord[1]]
 
         argsort = np.argsort(data)

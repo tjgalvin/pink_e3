@@ -1,6 +1,6 @@
 """Concatentate a series of similarity PINK mapping binaries into one
 """
-
+import re
 import pink_utils as pu
 import numpy as np 
 import argparse
@@ -8,6 +8,21 @@ import struct as st
 from glob import glob
 from tqdm import tqdm
 
+def natural_sort(l: list):
+    """Sort a set of strings with natural human sorting. 1,2,3,11,12,13 -
+    not 1,11,12,13,2,3
+    
+    Arguments:
+        l {list} -- List of items to sort
+    
+    """
+    convert = lambda text: int(text) if text.isdigit() else text
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
+    l.sort( key=alphanum_key )
+    
+    return
+    
+    
 def concat_simarilty(files: list, out: str):
     """Concat a set of PINK similarity binaries into a single one
     
@@ -15,10 +30,12 @@ def concat_simarilty(files: list, out: str):
         files {list} -- Collection of binaries to concatenate
         out {str} -- Output name of new file
     """
+    # files = sorted(files, key=natural_sort)
+    natural_sort(files)
+
     print('\nLoading initial file to capture example header...')
     ex_head = pu.heatmap(files[0]).file_head
 
-    files.sort()
     total = 0
 
     with open(out, 'wb')  as of:

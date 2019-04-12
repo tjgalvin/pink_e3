@@ -47,7 +47,7 @@ def concat_simarilty(files: list, out: str):
             ed = pu.heatmap(f)
             total += ed.file_head[0]
             for i in tqdm(range(ed.file_head[0])):
-                d = ed.get_bmu_ed(index=i)
+                d = ed.ed(index=i)
                 d.astype('f').tofile(of)
 
         print(f"\nUpdating the header to {total} items")

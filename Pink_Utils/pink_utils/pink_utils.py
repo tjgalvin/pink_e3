@@ -637,6 +637,7 @@ def segment_image_bin(imgs: image_binary, idxs: np.ndarray, out: str):
         print('\t', out)
         print(f'\t {len(idxs)} {type(len(idxs))}')
         print(f'\t', base_head)
+        print(f"\t({type(i) for i in base_head})")
         of.write(struct.pack('i', len(idxs)))
         of.write(struct.pack('i', base_head[1]))
         of.write(struct.pack('i', base_head[2]))

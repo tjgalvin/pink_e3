@@ -22,7 +22,7 @@ def plot_image(imgs: pu.image_binary, idx:int, neurons: list, out: str, title: s
     """
     no_chan = imgs.file_head[1]
 
-    fig, (axes, axes2) = plt.subplots(2,no_chan)
+    fig, (axes, axes2) = plt.subplots(2,no_chan, figsize=(10,10))
 
     for c, ax in zip(range(no_chan), axes.flat):
         img = imgs.get_image(index=idx, channel=c)
@@ -72,25 +72,29 @@ def perc(som: pu.som, ed: pu.heatmap, imgs:pu.image_binary, base_out:str, levels
         # argmask = (argmin[0] == coord[0]) & (argmin[1] == coord[1])
         argmask = np.argwhere((argmin[0] == coord[0]) & (argmin[1] == coord[1]))[:, 0]
 
+        # No matching BMU sources
+        if len(argmask) == 0:
+            continue
+
         data = ed.data[argmask, coord[0], coord[1]]
 
         argsort = np.argsort(data)
-        perc_idx = argsort[ ((len(argsort) - 1) * (perc / (len(perc)-1))).astype(np.int) ]
+        perc_idx = argsort[ ((len(argsort) - 1) * (perc / len(perc))).astype(np.int) ]
 
+        print(coord)
         print(som.file_head)
         neurons = [som.get_neuron(y=coord[0], x=coord[1], channel=i) for i in range(som_chan)]
-
+        print(len(perc), len(perc_idx))
+        
         for p, idx in zip(perc, perc_idx):
             midx = argmask[idx]
             p_level = (p / len(perc)) * 100.
-
             title = f"Neuron ({coord[0]}, {coord[1]}) - Top {p_level:.2f}% of distribution"
 
-            plot_image(imgs, midx, neurons, f"{base_out}/neuron_{coord[0]}_{coord[1]}_{p}_{idx}.png", title=title)
+            print(f"\t {p_level:.1f}")
+            plot_image(imgs, midx, neurons, f"{base_out}/neuron_{coord[0]}_{coord[1]}_{p}_{midx}.png", title=title)
 
     
-
-
 if __name__ == '__main__':
     parse = argparse.ArgumentParser(description='Given a image binary and simiarlirt matrix, produce a '\
                                     'set of images across a range of similarities for each neuron')

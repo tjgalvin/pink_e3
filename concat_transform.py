@@ -38,7 +38,7 @@ def concat_simarilty(files: list, out: str):
     natural_sort(files)
 
     print('\nLoading initial file to capture example header...')
-    ex_head = pu.heatmap(files[0]).file_head
+    ex_head = pu.transform(files[0]).file_head
 
     total = 0
 
@@ -48,11 +48,15 @@ def concat_simarilty(files: list, out: str):
 
         for f in files:
             print(f'\nAdding {f}')
-            ed = pu.heatmap(f)
-            total += ed.file_head[0]
-            for i in tqdm(range(ed.file_head[0])):
-                d = ed.ed(index=i)
-                d.astype('f').tofile(of)
+            trans = pu.transform(f)
+            total += trans.file_head[0]
+            f = trans.f
+            f.seek(len(trans.file_head)*4)
+            while True:
+                chunk = f.read(4096)
+                if not chunk:
+                    break
+                of.write(chunk)
 
         print(f"\nUpdating the header to {total} items")
         of.seek(0)
@@ -60,10 +64,10 @@ def concat_simarilty(files: list, out: str):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Concatenate a series of similarity measures to one another")
-    parser.add_argument('similarity', nargs='+', help='Set of PINK mapping files to concatentat', type=str)
+    parser = argparse.ArgumentParser(description="Concatenate a series of transforms to one another")
+    parser.add_argument('transform', nargs='+', help='Set of PINK mapping files to concatentat', type=str)
     parser.add_argument('output', help='Output of new concatenated file', type=str)
 
     args = parser.parse_args()
 
-    concat_simarilty(args.similarity, args.output)
+    concat_simarilty(args.transform, args.output)

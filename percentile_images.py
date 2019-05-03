@@ -83,7 +83,7 @@ def perc(som: pu.som, ed: pu.heatmap, imgs:pu.image_binary, base_out:str, levels
 
         print(coord)
         print(som.file_head)
-        neurons = [som.get_neuron(y=coord[0], x=coord[1], channel=i) for i in range(som_chan)]
+        neurons = [som.get_neuron(y=coord[1], x=coord[0], channel=i) for i in range(som_chan)]
         print(len(perc), len(perc_idx))
         
         for p, idx in zip(perc, perc_idx):

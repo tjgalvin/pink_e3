@@ -12,7 +12,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.stats import gaussian_kde
 
 def plot_overlay(img: np.ndarray, pos_pix: np.ndarray, neuron: tuple, 
-                out: str='./'):
+                out: str='./', mask: np.ndarray=None):
     """Create a figure to overlay onto
     
     Arguments:
@@ -21,7 +21,8 @@ def plot_overlay(img: np.ndarray, pos_pix: np.ndarray, neuron: tuple,
         neuron {tuple} -- key to index of neuron on the SOM
     
     Keyword Arguments:
-        out {str} -- Output base name to save figures to
+        out {str} -- Output base name to save figures to 
+        mask {np.ndarray} -- Which objects were matched to this neuron (Default: {None})
     """
     fig, (ax, ax2) = plt.subplots(1,2, figsize=(7.5,5))
 
@@ -29,6 +30,7 @@ def plot_overlay(img: np.ndarray, pos_pix: np.ndarray, neuron: tuple,
     ax.annotate('(a)', xy=(0.05,0.9), xycoords='axes fraction', bbox=bbox_props)
     
     ax.imshow(som.get_neuron(channel=0, y=neuron[0], x=neuron[1]), cmap='bwr',origin='lower left')
+    ax.set(title=f"N = {mask.shape}, Matches = {pos_pix.shape}")
 
     divider = make_axes_locatable(ax2)
 
@@ -41,10 +43,10 @@ def plot_overlay(img: np.ndarray, pos_pix: np.ndarray, neuron: tuple,
     plt.setp(axHistx.get_xticklabels(), visible=False)
     plt.setp(axHisty.get_yticklabels(), visible=False)
 
-    im = ax2.hexbin(pos_pix[:,1], pos_pix[:,0], gridsize=(10,10), bins='log', mincnt=1)
+    im = ax2.hexbin(pos_pix[:,1], pos_pix[:,0], gridsize=(30,30), bins='log', mincnt=1)
     # ax2.scatter(pix_pos[:,1], pix_pos[:,0], marker='o')
-    axHistx.hist(pos_pix[:,1], bins=20, density=True)
-    axHisty.hist(pos_pix[:,0], bins=20, density=True, orientation='horizontal')
+    axHistx.hist(pos_pix[:,1], bins=30, density=True)
+    axHisty.hist(pos_pix[:,0], bins=30, density=True, orientation='horizontal')
     axHistx.set(ylabel='Density')
     axHisty.set(xlabel='Density')
 
@@ -67,7 +69,10 @@ def plot_overlay(img: np.ndarray, pos_pix: np.ndarray, neuron: tuple,
 
     fig.colorbar(im, cax=cax, orientation='horizontal', label='Counts')
     fig.tight_layout()
-    fig.savefig(f"{out}/prob_neuron_{'_'.join([str(i) for i in neuron])}.pdf")
+
+    f = f"{out}/prob_neuron_{'_'.join([str(i) for i in neuron])}.png"
+    print(f'\tSaving {f}')
+    fig.savefig(f"{f}")
     plt.close(fig)
 
 
@@ -107,18 +112,24 @@ def overlay_points(neuron: tuple, ed: pu.heatmap, trans: pu.transform, srcs: Tab
         srcs {Table} -- Catalogue of sources matching those in ed/trans
         cata {Table} -- Catalogue of sources to overlay
     """
-    target_idx = neuron[0]*head[1] + neuron[1]
+    head = som.file_head
 
+    target_idx = neuron[1]*head[1] + neuron[0]
+
+    print("\tSearching for matches")
     pos_min = np.argmin(ed.data.reshape(ed.data.shape[0],-1), axis=1)
     mask = np.argwhere(pos_min == target_idx)
     
     pix_pos = []
+    print(f"\tFound {mask.shape}")
+    print("\tIterating and looking for object")
 
     for i in mask:
         row = srcs[i]
         trans_info = trans.get_neuron_transform(index=i, pos=neuron)
-        spos = SkyCoord(ra=row['RA'].values*u.deg, dec=row['DEC'].values*u.deg)
-        res = search_around_sky(spos, cata, seplimit=2*u.arcmin)
+        spos = SkyCoord(ra=row['RA']*u.deg, dec=row['DEC']*u.deg)
+        
+        res = search_around_sky(spos, cata, seplimit=5*u.arcmin)
 
         for idx in res[1]:
             offsets = pu.great_circle_offsets(spos, cata[idx], pix_scale=1.5*u.arcsec)
@@ -127,48 +138,53 @@ def overlay_points(neuron: tuple, ed: pu.heatmap, trans: pu.transform, srcs: Tab
             
     pix_pos = np.array(pix_pos).reshape(-1,2) # No idea why the reshape is needed. 
 
-    return pix_pos
+    return pix_pos, mask
 
 
 def overlay_som(som: pu.som, ed: pu.heatmap, trans: pu.transform, 
                 srcs: Table, cata: Table, *args, plot: bool=False,
                 out_path: str='./', **kwargs):
-                """Iterate over the neurons in a SOM, find the sources 
-                with it as its BMU, and search for nearby objects in 
-                a provide catalogue. Overlay these nearby sources onto
-                the neuron
-                
-                Arguments:
-                    som {pu.som} -- PINK som file
-                    ed {pu.heatmap} -- PINK mapping file
-                    trans {pu.transform} -- Transform matrix for matching sources
-                    srcs {Table} -- Table of input sources matching the mapping outputs (ed/trans)
-                    cata {Table} -- Catalogue of objects to overlay
-                
-                Keyword Arguments:
-                    plot {bool} -- Save plotting (default: {False})
-                    out_path {str} -- Output directory for plotting (default: {'./'})
-                """
+    """Iterate over the neurons in a SOM, find the sources 
+    with it as its BMU, and search for nearby objects in 
+    a provide catalogue. Overlay these nearby sources onto
+    the neuron
+    
+    Arguments:
+        som {pu.som} -- PINK som file
+        ed {pu.heatmap} -- PINK mapping file
+        trans {pu.transform} -- Transform matrix for matching sources
+        srcs {Table} -- Table of input sources matching the mapping outputs (ed/trans)
+        cata {Table} -- Catalogue of objects to overlay
+    
+    Keyword Arguments:
+        plot {bool} -- Save plotting (default: {False})
+        out_path {str} -- Output directory for plotting (default: {'./'})
+    """
     head = som.file_head
 
     for y in range(head[1]):
         for x in range(head[2]):
             neuron = (y, x)
+            print(f"\nNeuron is {neuron}")
 
-            pos_pix = overlay_points(neuron, *args)
+            pos_pix, mask = overlay_points(neuron, ed, trans, srcs, cata)
 
-            print(pos_pix.shape)
+            print(f"\tMatches found {pos_pix.shape}")
+
+            if plot:
+                neuron_img = som.get_neuron(y=neuron[0], x=neuron[1])
+                plot_overlay(neuron_img, pos_pix, neuron, out=out_path, mask=mask)
 
 
 
 if __name__ == '__main__':
     parser = ArgumentParser(description='Overlay sources onto a neuron')
-    parser.add_argument('SOM', help='PINK produced binary', type=str)
-    parser.add_argument('Similarity', help='PINK produced mapping file', type=str)
-    parser.add_argument('Transform', help='PINK produced transform file', type=str)
-    parser.add_argument('Sources', help='Catalogue of sources matching the object in the similarity/transform', type=str)
-    parser.add_argument('Catalogue', help='Path to a file with RA/Dec columns', type=str)
-    parser.add_argument('--plot','-p',help='Create the plotting figures', action='store_frue', default=False)
+    parser.add_argument('som', help='PINK produced binary', type=str)
+    parser.add_argument('similarity', help='PINK produced mapping file', type=str)
+    parser.add_argument('transform', help='PINK produced transform file', type=str)
+    parser.add_argument('sources', help='Catalogue of sources matching the object in the similarity/transform', type=str)
+    parser.add_argument('catalogue', help='Path to a file with RA/Dec columns', type=str)
+    parser.add_argument('--plot','-p',help='Create the plotting figures', action='store_true', default=False)
     parser.add_argument('--out-path','-o', help='Base path to write output to', default='./', type=str)
     args = parser.parse_args()
 
@@ -179,10 +195,8 @@ if __name__ == '__main__':
     trans = pu.transform(args.transform)
     srcs = Table.read(args.sources)
     cata = Table.read(args.catalogue)
+    cata = SkyCoord(ra=cata['RA'], dec=cata['DEC'])
 
-    opts = {'plot': args.plot,
-            'out': args.out}
-
-    overlay_som(som, ed, trans, srcs, cata, plot=args.plot, out=args.out)
+    overlay_som(som, ed, trans, srcs, cata, plot=args.plot, out_path=args.out_path)
 
 

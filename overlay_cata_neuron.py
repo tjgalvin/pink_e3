@@ -26,10 +26,13 @@ def plot_overlay(img: np.ndarray, pos_pix: np.ndarray, neuron: tuple,
     """
     fig, (ax, ax2) = plt.subplots(1,2, figsize=(7.5,5))
 
+    kde_factor = ((3.5*u.arcmin.to(u.arcsecond))/(1.5*u.arcsecond)/30).value
+
+
     bbox_props = dict(boxstyle="round", fc="w", ec="0.5", alpha=0.9)
     ax.annotate('(a)', xy=(0.05,0.9), xycoords='axes fraction', bbox=bbox_props)
     
-    ax.imshow(som.get_neuron(channel=0, y=neuron[0], x=neuron[1]), cmap='bwr',origin='lower left')
+    ax.imshow(np.sqrt(som.get_neuron(channel=0, y=neuron[0], x=neuron[1])), cmap='bwr',origin='lower left')
     ax.set(title=f"N = {mask.shape}, Matches = {pos_pix.shape}")
 
     divider = make_axes_locatable(ax2)
@@ -43,21 +46,21 @@ def plot_overlay(img: np.ndarray, pos_pix: np.ndarray, neuron: tuple,
     plt.setp(axHistx.get_xticklabels(), visible=False)
     plt.setp(axHisty.get_yticklabels(), visible=False)
 
-    im = ax2.hexbin(pos_pix[:,1], pos_pix[:,0], gridsize=(30,30), bins='log', mincnt=1)
+    im = ax2.hexbin(pos_pix[:,1], pos_pix[:,0], gridsize=(50,50), bins='log', mincnt=1)
     # ax2.scatter(pix_pos[:,1], pix_pos[:,0], marker='o')
-    axHistx.hist(pos_pix[:,1], bins=30, density=True)
-    axHisty.hist(pos_pix[:,0], bins=30, density=True, orientation='horizontal')
+    axHistx.hist(pos_pix[:,1], bins=50, density=True)
+    axHisty.hist(pos_pix[:,0], bins=50, density=True, orientation='horizontal')
     axHistx.set(ylabel='Density')
     axHisty.set(xlabel='Density')
 
     # KDE 1, needs density in the hist call
     xx = np.linspace(pos_pix[:,1].min(), pos_pix[:,1].max(),1000)
-    kdex = gaussian_kde(pos_pix[:,1])
+    kdex = gaussian_kde(pos_pix[:,1], bw_method=kde_factor / np.std(pos_pix[:,1], ddof=1))
     axHistx.plot(xx, kdex(xx), color='black')
 
     # KDE 2, needs density in the hist call
     yy = np.linspace(pos_pix[:,0].min(), pos_pix[:,0].max(),1000)
-    kdey = gaussian_kde(pos_pix[:,0])
+    kdey = gaussian_kde(pos_pix[:,0], bw_method=kde_factor / np.std(pos_pix[:,1], ddof=1))
     axHisty.plot(kdey(yy), yy, color='black')
     
     plt_scale = ((3.5*u.arcmin.to(u.arcsecond))/(1.5*u.arcsecond)/2).value
@@ -77,6 +80,41 @@ def plot_overlay(img: np.ndarray, pos_pix: np.ndarray, neuron: tuple,
 
 
 def apply_transform(trans_info: tuple, offsets: np.ndarray):
+    """Transform a set of pixel coordinates following a transform matrix
+    
+    NOTE: Not entirely convinced this is correct. I think I am messing up the
+    proper transform by either (1) splitting/concating the PINK binary files
+    to speed up processing [there is essentially an extra transpose from F<->C
+    style notation], and/or (2) setting origin to lower left in the imshow().
+    Be aware that this could be wrong.  
+
+    Arguments:
+        trans_info {tuple} -- tuple from pink (FLIP, RADIANS)
+        offsets {np.ndarray} -- Pixel offsets from the center of image
+    """
+    flip, angle = trans_info
+
+    trans_clicks = []
+    for c in offsets:
+        off_x, off_y = c
+
+        if flip == 1:
+            off_x, off_y = off_y, off_x
+            off_x = -off_x
+            # off_y = -off_y
+
+        trans_y = off_y*np.cos(angle) - off_x*np.sin(angle)
+        trans_x = off_y*np.sin(angle) + off_x*np.cos(angle)
+
+        if flip == 0:
+            trans_y, trans_x = trans_x, trans_y
+
+        trans_clicks.append( (trans_y, trans_x) )
+
+    return trans_clicks
+
+
+def apply_transform_original(trans_info: tuple, offsets: np.ndarray):
     """Transform a set of pixel coordinates following a transform matrix
     
     Arguments:
@@ -127,6 +165,12 @@ def overlay_points(neuron: tuple, ed: pu.heatmap, trans: pu.transform, srcs: Tab
     for i in mask:
         row = srcs[i]
         trans_info = trans.get_neuron_transform(index=i, pos=neuron)
+        
+        # Added to test the individual flipping cases to see what a 
+        # problem was. Still not covinced that it is completely correct. 
+        # Got to do with a transpose from splitting/concating PINK binaries. 
+        # if trans_info[0] == 0:
+
         spos = SkyCoord(ra=row['RA']*u.deg, dec=row['DEC']*u.deg)
         
         res = search_around_sky(spos, cata, seplimit=5*u.arcmin)
@@ -135,7 +179,7 @@ def overlay_points(neuron: tuple, ed: pu.heatmap, trans: pu.transform, srcs: Tab
             offsets = pu.great_circle_offsets(spos, cata[idx], pix_scale=1.5*u.arcsec)
             offsets = apply_transform(trans_info, (offsets,))
             pix_pos.append(offsets)
-            
+                
     pix_pos = np.array(pix_pos).reshape(-1,2) # No idea why the reshape is needed. 
 
     return pix_pos, mask

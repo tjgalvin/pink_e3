@@ -183,7 +183,8 @@ def annotate_neuron(neurons, key: tuple, cmap: str=None, results: Annotation=Non
 
     fig1_callback = Callback()
 
-    results = Annotation(key, neurons)
+    if results is None:
+        results = Annotation(key, neurons)
 
     fig1_key, fig1_button = make_fig1_callbacks(fig1_callback, results, fig1, axes)
     fig1.canvas.mpl_connect('key_press_event', fig1_key)
@@ -248,6 +249,12 @@ def perform_annotations(som: str, save: str=False):
         
         elif callback.next_move == 'quit':
             break
+
+        if save != False:
+            print('Saving the annotations...')
+            save_annotations_table(annotations,  f"{save}-table.csv")
+            save_annotations_pickle(annotations, f"{save}-table.pkl")
+
 
     if save != False:
         save_annotations_table(annotations,  f"{save}-table.csv")
@@ -314,6 +321,7 @@ def plot_neuron_features(neuron: Annotation):
     fig.suptitle(neuron.key)
     fig.tight_layout()
     plt.show()
+
 
 def visualise_annotations(annotations: str):
     """Visualise neurons which have already been annotated. The path will load in

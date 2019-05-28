@@ -12,310 +12,120 @@ TODO: Consistency for positions on images. Consider (y, x) type standard
 import matplotlib.pyplot as plt 
 import numpy as np 
 import pandas as pd
-import struct
+import struct as st
 import astropy.units as u
 import networkx as nx
 from astropy.coordinates import SkyCoord, SkyOffsetFrame, ICRS
 from scipy.ndimage import rotate as img_rotate
 from collections import defaultdict
-from tqdm import tqdm
 __author__ = 'Tim Galvin'
 
 
 def header_offset(path):
     """Determine the offset required to ignore the header information
-    of a PINK binary
+    of a PINK binary. The header format spec: lines with a '#' start are
+    ignored until a '# END OF HEADER' is found. Only valid at beginning of
+    file and 
     
     Arguments:
         path {str} -- Path to the pink binary file
     """
     with open(path, 'rb') as fd:
-        offset = 0
         for line in fd:
             if not line.startswith(b'#'):
-                return offset
-            else:
-                offset = fd.tell()
+                return 0
+            elif line == b'# END OF HEADER':
+                return fd.tell()
             
 
-class heatmap:
+class Heatmap():
     '''Helper to interact with a heatmap output
     '''
     def __init__(self, path):
         '''Path to the heatmap to load
         '''
         self.path = path
-        self.fd = None # File descriptor to access if needed
-        self.header_info = None
         self.offset = header_offset(self.path)
-        self.data = self._read_data()
+
+        with open(self.path, 'rb') as of:
+            of.seek(self.offset)
+            self.header_info = st.unpack('iiii', of.read(4*4))
+
+        self.data = np.memmap(self.path, dtype=np.float32, offset=self.offset+4*4, 
+                    order='C', shape=self.header_info)
 
 
-    @property
-    def f(self):
-        """Helper to open a persistent filedescriptor. Will always start
-        at beginning of file
+    def __repr__(self):
+        """Print the class
         """
-        # if self.fd is None:
-        #     self.fd = open(self.path, 'rb')
-        fd = open(self.path, 'rb')
-        
-        # Skip PINK header if it exists
-        fd.seek(self.offset)
+        return f"Heatmap file of {self.header_info} shape with offset {self.offset}"
 
-        return fd
 
     @property
     def file_head(self):
-        '''Return the file header information from PINK
+        '''Return the file header information from PINK, here for consistency
         '''
-        # Get file handler seeked to zero
-        f = self.f
-    
-        no_images, som_width, som_height, som_depth = struct.unpack('i' * 4, f.read(4*4))
-        
-        return (no_images, som_width, som_height, som_depth)
-
-
-    @property
-    def details(self):
-        if self.header_info is None:
-            self.header_info = self.file_head
-        
         return self.header_info
 
 
-    def _read_data(self, chunk_size=32768):
-        """Function to read in the data upon creating the heatmap. Rewritten to 
-        get over a seemingly hard limit to file size that can be read in in one
-        call. Fustrating.
-        """
-        # Get file handler seeked to after the header
-        f = self.f
-
-        # no_images, som_width, som_height, som_depth = struct.unpack('i' * 4, f.read(4*4))
-        no_images, som_width, som_height, som_depth = self.details
-
-        size = som_width * som_height * som_depth
-        image_width = som_width
-        image_height = som_depth * som_height
-
-        f.seek(4*4, 0)
-        data = np.zeros((no_images, image_height, image_width), dtype=np.float32)
-
-        for i in tqdm(range(no_images)):
-            darr = np.array(struct.unpack('f' * size, f.read(size*4)))
-            d = np.ndarray([som_width, som_height, som_depth], 'float', darr)
-            d = np.swapaxes(d, 0, 2)
-            d = np.reshape(d, (image_height, image_width))
-            data[i] = d
-
-        return data
-
-
-        data = []
-        # A nicer approach for large heatmaps in terms of memory usage
-        for i in tqdm(range(no_images)):
-            darr = np.array(struct.unpack('f' * size, f.read(size*4)))
-            d = np.ndarray([som_width, som_height, som_depth], 'float', darr)
-            d = np.swapaxes(d, 0, 2)
-            d = np.reshape(d, (image_height, image_width))
-            data.append(d)
-
-        data = np.array(data, dtype=np.float32)
-        
-        return data
-
-
-    def _read_data_original(self):
-        """Function to read in the data upon creating the heatmap
-        """
-        # Get file handler seeked to after the header
-        f = self.f
-
-        # no_images, som_width, som_height, som_depth = struct.unpack('i' * 4, f.read(4*4))
-        no_images, som_width, som_height, som_depth = self.details
-
-        size = som_width * som_height * som_depth
-        image_width = som_width
-        image_height = som_depth * som_height
-
-        # Seek the image number here
-        f.seek(4*4, 0)
-        array = np.array(struct.unpack('f' * size*no_images, f.read(no_images*size * 4)))
-        data = np.ndarray([no_images, som_width, som_height, som_depth], 'float', array)
-        data = np.swapaxes(data, 1, 3)
-        data = np.reshape(data, (no_images, image_height, image_width))
-
-        return data
-
-
-    def _ed_to_prob(self, ed, stretch=10, *args, **kwargs):
-        '''Function to conver the euclidean distance to a likelihood
-        '''
-        prob = 1. / ed**stretch
-        prob = prob / prob.sum()
-        
-        return prob
-
-
-    def _get_ed(self, index=0, *args, **kwargs):
-        '''Get the Euclidean distance of the i't page
-        '''
-
-        data = self.data[index]
-
-        return data
-
-
-    def ed(self, index=0, prob=False, *args, **kwargs):
+    def ed(self, index=0, *args, squeeze=True, **kwargs):
         '''Get the slice of a heatmap that has been mapped
         '''
-        arr = self._get_ed(index=index)
-        if prob:
-            arr = self._ed_to_prob(arr, *args, **kwargs)
-        
+        arr = self.data[index]
+
+        if squeeze:
+            arr = np.squeeze(self.data[index])
+
         return arr
 
 
-    def get_bmu(self, index:int):
+    def bmu_pos(self, index:int):
         """Return the position of the best matching neuron for a given
         object index
-        
-        TODO: Support other modes (e.g. worst neuron, n-th neuron)
 
         Arguments:
             index {int} -- Index of source to get BMU of
         """
-        hmap = self.ed(index=index)
-        pos_min = np.unravel_index(np.argmin(hmap), hmap.shape)
+        hmap = self.ed(index=index, squeeze=False)
+        pos_min = np.unravel_index(np.argmin(hmap.reshape(-1)), hmap.shape)
 
         return pos_min
 
 
-    def get_bmu_ed(self, index: int):
-        """Return the ED of the best matching neuron
-        
-        TODO: Support other modes (e.g. worst neuron, n-th neuron)
-
-        Arguments:
-            index {int} -- Index of image to get the ED of
-        """
-
-        return np.min(self.ed(index=index))
-
-
-class transform:
+class Transform():
     '''Helper to interact with the transform output from pink
     '''
     def __init__(self, path):
-        '''Path to the heatmap to load
+        '''Path to the Tranform to load
         '''
         self.path = path
-        self.fd = None # File descriptor to access if needed
-        self.header_info = None
-        self.offset = 0
-        self.data = None
+        self.offset = header_offset(self.path)
 
-        # Skip the PINK header information
-        with open(self.path, 'rb') as fd:
-            for line in fd:
-                if not line.startswith(b'#'):
-                    self.offset == fd.tell()
-                    break
+        with open(self.path, 'rb') as of:
+            of.seek(self.offset)
+            self.header_info = st.unpack('iiii', of.read(4*4))
+
+        self.data = np.memmap(self.path, dtype=np.dtype([('flip', np.int8),('angle', np.float32)]), 
+                    offset=self.offset+4*4, order='C', shape=self.header_info)
             
         
-    @property
-    def f(self):
-        """Helper to open a persistent filedescriptor. Will always start
-        at beginning of file
+    def __repr__(self):
+        """Pretty print the class
         """
-        # if self.fd is None:
-        #     self.fd = open(self.path, 'rb')
-        
-        fd = open(self.path, 'rb')
-        
-        # Skip PINK header if it exists
-        fd.seek(self.offset, 0)
+        return f"Transform file of {self.header_info} shape with offset {self.offset}"
 
-        return fd
 
     @property
     def file_head(self):
         '''Return the file header information from PINK
         '''
-        # Get file handler seeked to zero
-        f = self.f
-    
-        no_images, som_width, som_height, som_depth = struct.unpack('i' * 4, f.read(4*4))
-        
-        return (no_images, som_width, som_height, som_depth)
-
-
-    @property
-    def details(self):
-        if self.header_info is None:
-            self.header_info = self.file_head
-        
         return self.header_info
 
 
-    def _get_transform(self, index=0, *args, **kwargs):
-        '''Get the transform of the i't page
+    def transform(self, index: int=0, *args, **kwargs):
+        '''Get the slice of a transform that has been mapped
         '''
-        if self.data is None:
-            # Get file handler seeked to zero
-            f = self.f
-
-            no_images, som_width, som_height, som_depth = self.details
-
-            if no_images < index:
-                return None
-
-            size = som_width * som_height * som_depth
-
-            # Want to avoid magic numbers
-            pixel_size = np.dtype(np.int8).itemsize + np.dtype(np.float32).itemsize  
-            
-            # Seek the image number here, 4*4 is for the four bytes for header info
-            f.seek(4*4 + self.offset, 0)
-            data = np.fromfile(f, dtype = np.dtype([('flip', np.int8), 
-                                                    ('angle', np.float32)]), 
-                                count = no_images*size)
-            data = np.reshape(data, (no_images, som_width, som_height*som_depth))
-            self.data = data
-        else:
-            data = self.data
-            
-        return data[index]
-
-
-        # # Get file handler seeked to zero
-        # f = self.f
-
-        # no_images, som_width, som_height, som_depth = self.details
-
-        # if no_images < index:
-        #     return None
-
-        # size = som_width * som_height * som_depth
-
-        # # Want to avoid magic numbers
-        # pixel_size = np.dtype(np.int8).itemsize + np.dtype(np.float32).itemsize  
-        
-        # # Seek the image number here, 4*4 is for the four bytes for header info
-        # f.seek(index * size * pixel_size + 4*4 + self.offset, 0)
-        # data = np.fromfile(f, dtype = np.dtype([('flip', np.int8), 
-        #                                         ('angle', np.float32)]), 
-        #                       count = size)
-
-        # return data
-
-
-    def transform(self, index=0, prob=False, *args, **kwargs):
-        '''Get the slice of a heatmap that has been mapped
-        '''
-        arr = self._get_transform(index=index)
+        arr = np.squeeze(self.data[index])
         
         return arr
 
@@ -334,39 +144,46 @@ class transform:
         return flip, ro
 
 
-class image_binary:
-    '''Helper to interact with a heatmap output
+class Images():
+    '''Helper to interact with a image binary
     '''
     def __init__(self, path):
         '''Path to the image binary to load
-        
-        TODO: Add the PINK header consumer to the file_head and opening methods/properties
         '''
         self.path = path
         self.offset = header_offset(self.path)
 
-    def get_image(self, index=0, channel=0):
-        '''Return the index-th image that was dumped to the binary image file that
-        is managed by this instance of Binary
+        with open(self.path, 'rb') as of:
+            of.seek(self.offset)
+            self.header_info = st.unpack('i' * 4, of.read(4 * 4))
+
+        self.data = np.memmap(self.path, dtype=np.float32, offset=self.offset+4*4, order='C',
+                    shape=self.header_info)
+
+
+    def __repr__(self):
+        """Pretty print the class
+        """
+        return f"Image binary file of {self.header_info} shape with offset {self.offset}"
+
+
+    def get_image(self, index: int=0, channel: int=0, transform: tuple=None, **kwargs):
+        """Interface to get an image/channel and optionally apply transform
         
-        index - int
-            The source image to return
-        channel - int
-            The channel number of the image to return
-        '''
-        with open(self.path, 'rb') as f:
-            no_images, no_channels, width, height = struct.unpack('i' * 4, f.read(4 * 4))
-            if index > no_images:
-                return None
-            if channel > no_channels:
-                return None
+        Keyword Arguments:
+            index {int} -- index of image (default: {0})
+            channel {int} -- default channel of image (default: {0})
+            transform {tuple} -- transform to apply (default: {None})
+        
+        Returns:
+            np.ndarray -- Image with transform applied
+        """
+        img = self.data[index, channel]
 
-            size = width * height
-            f.seek(4*4 + self.offset + (index*no_channels + channel) * size*4)
-            array = np.array(struct.unpack('f' * size, f.read(size*4)))
-            data = np.ndarray([width,height], 'float', array)
+        if transform is not None:
+            img = rotate_src_image(img, transform, **kwargs)
 
-            return data
+        return img
 
 
     def get_index_dump(self, index: int):
@@ -375,30 +192,22 @@ class image_binary:
         Arguments:
             index {int} -- Index of image data to copy
         """
-        with open(self.path, 'rb') as f:
-            no_images, no_channels, width, height = struct.unpack('i' * 4, f.read(4 * 4))
-            if index > no_images:
-                return None
-            
-            size = width * height * no_channels
-            f.seek(4*4 + self.offset + (index * size * 4))
-            array = np.array(struct.unpack('f' * size, f.read(size*4)))
-
-            return array
+        return self.data[index,:,:,:].flatten()
 
 
     @property
     def file_head(self):
         '''Return the file header information from PINK
         '''
-        with open(self.path, 'rb') as f:
-            no_images, no_channels, width, height = struct.unpack('i' * 4, f.read(4*4))
-            
-            return (no_images, no_channels, width, height)
+        return self.header_info
 
 
-class som:
-    '''Class to interact with a SOM object
+class SOM():
+    '''Class to interact with a SOM object. 
+
+    TODO: Move towards the memmap interface. Be care though as a number of reshapes/reorders
+    have to be used to actually make it work, and these no longer map the file. Actually reads
+    it in. 
     '''
     def __init__(self, path):
         self.path = path
@@ -407,6 +216,13 @@ class som:
         self.offset = header_offset(self.path)
 
         self.data = None                
+
+
+    def __repr__(self):
+        """Pretty print the class
+        """
+        return f"SOM file of {self.header_info} shape with offset {self.offset}"
+
 
     @property
     def f(self):
@@ -430,7 +246,7 @@ class som:
         f = self.f
     
         # Unpack the header information
-        numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height = struct.unpack('i' * 6, f.read(4*6))
+        numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height = st.unpack('i' * 6, f.read(4*6))
 
         return (numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height)
 
@@ -443,7 +259,7 @@ class som:
         som = self.f
 
         # Unpack the header information
-        numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height = struct.unpack('i' * 6, som.read(4*6))
+        numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height = st.unpack('i' * 6, som.read(4*6))
         SOM_size = np.prod([SOM_width, SOM_height, SOM_depth])
 
         # Check to ensure that the request channel exists. Remeber we are comparing
@@ -456,7 +272,7 @@ class som:
         if self.data is None:
 
             dataSize = numberOfChannels * SOM_size * neuron_width * neuron_height
-            array = np.array(struct.unpack('f' * dataSize, som.read(dataSize * 4)))
+            array = np.array(st.unpack('f' * dataSize, som.read(dataSize * 4)))
 
             image_width = SOM_width * neuron_width
             image_height = SOM_depth * SOM_height * neuron_height
@@ -477,6 +293,7 @@ class som:
             data = data[:,channel,:]
 
         return data
+
 
     def get_neuron(self, x, y, channel=0):
         '''Extract a neuron out of the SOM given the (x,y) and optional channel number
@@ -572,7 +389,7 @@ class Annotation():
         Keyword Arguments:
             transform {tuple} -- PINK produced transform (flip, angle). (default: {None})
             channel {int} -- Channel whose clicks to return (default: {0})
-            center {bool} -- Do rotation around image center (default: {True})
+            center {bool} -- Do rotation around image center. Can also specify tuple of dimensions. (default: {True})
             order {bool} -- Order the clicks from closest to centre to furthest (default: {False})
         """
 
@@ -615,54 +432,37 @@ class Annotation():
 
         return trans_clicks
 
+# ------------------------------------------------------------------------------
+# Transformation functions (for images)
+# ------------------------------------------------------------------------------
 
-# ------------------------------------------------------------------------------
-# Image binary segmenting
-# ------------------------------------------------------------------------------
-def segment_image_bin(imgs: image_binary, idxs: np.ndarray, out: str):
-    """Function to create a new binary file given an existing
-    binary file and a list of indicies to copy across. No changes
-    to image type of shapes are possible
+def rotate_src_image(img: np.ndarray, transform: tuple, *args, reshape: bool=False, **kwargs):
+    """Transform an input source image following some PINK transform. This aligns the 
+    source image onto features within a neuron. 
     
     Arguments:
-        imgs {image_binary} -- Images binary to copy images from
-        idxs {np.ndarray} -- Indicies to copy selected with some method
-        out {str} -- Name of the new pink file to create
+        img {np.ndarray} -- Image to transform
+        transform {tuple} -- Transform option from PINK
+
+    Keyword Arguments:
+        reshape {bool} -- Reshape the image when rotating (Default: {False})
+    
+    Returns:
+        np.ndarray -- The transformed image
     """
-    from tqdm import tqdm
+    flip, angle = transform
 
-    base_head = imgs.file_head
-
-    with open(f"{out}", 'wb') as of:
-        print('\t', out)
-        print(f'\t {len(idxs)} {type(len(idxs))}')
-        print(f'\t', base_head)
-        print(f"\t({[type(i) for i in base_head]})")
-        of.write(struct.pack('i', len(idxs)))
-        of.write(struct.pack('i', base_head[1]))
-        of.write(struct.pack('i', base_head[2]))
-        of.write(struct.pack('i', base_head[3]))
-        
-        for idx in tqdm(idxs):
-            d = imgs.get_index_dump(idx)
-            d.astype('f').tofile(of)
-
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
-# Image manipulation
-# ------------------------------------------------------------------------------
-
-def zoom(img, in_y, in_x):
-    diff_x = in_x // 2
-    diff_y = in_y // 2
+    img = img.T
     
-    cen_x = img.shape[1] // 2
-    cen_y = img.shape[0] // 2
-    
-    return img[cen_y-diff_y:cen_y+diff_y,
-               cen_x-diff_x:cen_x+diff_x]
+    # Scipy ndimage rotate goes anticlockwise. PINK goes
+    # clockwise
+    img = img_rotate(img, np.rad2deg(-angle), reshape=reshape)
 
+    if flip == 1:
+        img = img[:,::-1]
+
+    return img
+    
 # ------------------------------------------------------------------------------
 
 
@@ -742,7 +542,7 @@ def no_ticks(ax):
         ax.get_yaxis().set_visible(False)
 
 
-def connvis_graph(ed: heatmap, min_edge: float=0.0, full: bool=False, log: bool=False):
+def connvis_graph(ed: Heatmap, min_edge: float=0.0, full: bool=False, log: bool=False):
     """Produce a graph based on the CONNvis method
     
     Arguments:

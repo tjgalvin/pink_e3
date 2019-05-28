@@ -105,6 +105,7 @@ def make_fig1_callbacks(callback: Callback, results: Annotation, fig1: plt.Figur
             mask_ax.imshow(mask_im)
 
             overlay_clicks(results, mask_ax)
+
             fig1.canvas.draw_idle()
         
         elif event.key == 'q':
@@ -135,6 +136,10 @@ def make_fig1_callbacks(callback: Callback, results: Annotation, fig1: plt.Figur
             index = np.argwhere(axes.flat == event.inaxes)[0,0]
             results.add_click(index, (event.xdata, event.ydata))
             overlay_clicks(results, mask_ax)
+
+            for ax in axes.flat:
+                if ax != mask_ax:
+                    ax.plot(event.xdata, event.ydata, 'go', ms=12)
 
         fig1.canvas.draw_idle()
 
@@ -191,7 +196,7 @@ def annotate_neuron(neurons, key: tuple, cmap: str=None, results: Annotation=Non
     fig1.canvas.mpl_connect('button_press_event', fig1_button)
 
     for n, ax in zip(neurons, axes.flat):
-        ax.imshow(n, cmap=cmap)
+        ax.imshow(np.sqrt(n), cmap=cmap)
         # ax.axvline(n.shape[1]/2 - 1, color='black')
         # ax.axhline(n.shape[0]/2 - 1, color='black')
 
@@ -222,7 +227,7 @@ def perform_annotations(som: str, save: str=False):
     max_y = height
     max_x = width
 
-    combos = [(x,y,z) for x in range(max_x) for y in range(max_y) for z in range(max_z)]
+    combos = [(y,x,z) for x in range(max_x) for y in range(max_y) for z in range(max_z)]
 
     position = 0
     annotations = {}

@@ -18,6 +18,11 @@ import networkx as nx
 from astropy.coordinates import SkyCoord, SkyOffsetFrame, ICRS
 from scipy.ndimage import rotate as img_rotate
 from collections import defaultdict
+from scipy import ndimage as ndi
+from skimage.morphology import binary_dilation
+from skimage.segmentation import flood_fill
+
+
 __author__ = 'Tim Galvin'
 
 
@@ -432,6 +437,50 @@ class Annotation():
 
         return trans_clicks
 
+    def segment_neuron(self, channel: int=0, thres: float=3.25, step: float=0.5):
+        """Create a binary mask of the segmented regions within a neuron that contain the 
+        object of interest. This requires clicking information that is used to isolate specific
+        regions. 
+        
+        Keyword Arguments:
+            channel {int} -- The neuron channel to perform segmenting against (default: {0})
+            thres {float} -- Sigma threshold used for binary masking (default: {3.25})
+            channel {int} -- Change in sigma threshold when to many pixels clipped (default: {0.5})
+        """
+        img = self.neurons[channel].copy()
+        clicks = self.clicks[channel]
+
+        d = np.log10(img.flatten())
+        dmean = np.mean(d)
+        dstd = np.std(d)
+        thres = 3.25
+
+        mask = np.log10(img) < (dmean+thres*dstd) 
+        while np.sum(mask == False) < 10:
+            thres -= 0.5
+            mask = np.log10(img) < (dmean+thres*dstd) 
+
+        img[mask] = 0
+        img[~mask] = 1
+
+        # Flood fill to find the appropriate segnents with clicks as seeds
+        img_flood = img.copy()
+        for c in clicks:
+            # Clicks were saved in the (x,y) order. For images arrays they are (y, x)
+            cc = tuple([int(c1) for c1 in c[::-1]])
+            if img_flood[cc[0], cc[1]] == 1:
+                img_flood = flood_fill(img_flood, cc, 0.5)
+
+        mask = img_flood == 0.5
+        img_flood[mask] = 1
+        img_flood[~mask] = 0
+
+        img_flood = binary_dilation(img_flood)
+        
+        img_flood = ndi.binary_fill_holes(img_flood)        
+
+        return img_flood
+
 # ------------------------------------------------------------------------------
 # Transformation functions (for images)
 # ------------------------------------------------------------------------------
@@ -480,8 +529,8 @@ def estimate_position(pos: SkyCoord, dx: int, dy: int, pix_scale: u= 1*u.arcsec)
         pix_scale {u} -- Pixel scale. Assume square pixels. 
     """
     # Turn pixel offsets to angular
-    dx *= pix_scale
-    dy *= pix_scale
+    dx = dx * pix_scale
+    dy = dy * pix_scale
 
     # RA increases right to left
     dx = -dx
@@ -490,16 +539,6 @@ def estimate_position(pos: SkyCoord, dx: int, dy: int, pix_scale: u= 1*u.arcsec)
     new_pos = SkyCoord(lon=dx, lat=dy, frame=new_frame)
     
     return new_pos.transform_to(ICRS)
-
-    # # Turn pixel offsets to angular
-    # dx = dx * pix_scale * np.cos(pos.dec.radian)
-    # dy *= pix_scale
-
-    # # Obtain relative position. RA on sky increases right to left. 
-    # # Think there is a cos(dec) term in here that needs to be handled?
-    # offset_pos = SkyCoord(pos.ra - dx, pos.dec + dy)
-
-    # return offset_pos
 
 
 def great_circle_offsets(pos1: SkyCoord, pos2: SkyCoord, pix_scale: u=None):

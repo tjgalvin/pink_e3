@@ -10,7 +10,7 @@ import pickle
 import argparse
 import pandas as pd
 import numpy as np
-import pink_utils as pu
+import pink_utils2 as pu
 
 from pink_utils import Annotation
 from itertools import combinations
@@ -219,7 +219,7 @@ def perform_annotations(som: str, save: str=False):
         som {str} -- Path to the SOM to annotate
         save {bool} -- Base path to save items to. If False, no saving of items. (default: {False})
     """
-    som = pu.som(som)
+    som = pu.SOM(som)
 
     chan, height, width, depth, n_height, n_width = som.file_head
 
@@ -264,6 +264,40 @@ def perform_annotations(som: str, save: str=False):
     if save != False:
         save_annotations_table(annotations,  f"{save}-table.csv")
         save_annotations_pickle(annotations, f"{save}-table.pkl")
+
+# ------------------------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------------------------
+# Saving utilities for the annotated features and their class instance
+# ------------------------------------------------------------------------------------------------
+def update_annotation(som: str, save: str, key: tuple):
+    """Will allow for a single neuron to be updated given an existing
+    pickled annotation set
+    
+    Arguments:
+        som {str} -- Path to the SOM file with the neuron to annotate
+        save {str} -- Path to existing annotated pickle set
+        key {tuple} -- Key to load in and replace annotations
+    """
+    som = pu.SOM(som)
+
+    chan, height, width, depth, n_height, n_width = som.file_head
+
+    with open(f"{save}", "rb") as of:
+        annotations = pickle.load(of)
+
+    x, y, z = key
+
+    # Note that the depth is ignored here
+    neurons = [som.get_neuron(y=y, x=x, channel=c) for c in range(chan)]
+
+    callback, results = annotate_neuron(neurons, key)
+
+    if callback.next_move == 'next':
+        annotations[key] = results
+    
+    save_annotations_table(annotations,  f"{save}".replace('pkl','csv'))
+    save_annotations_pickle(annotations, f"{save}")
 
 # ------------------------------------------------------------------------------------------------
 
@@ -354,6 +388,7 @@ if __name__ == '__main__':
     # group1.add_argument('SOM', help='Path to a PINK SOM')
     group1.add_argument('--save', '-s', nargs=1, default=False, help='Save the annotated labels and mask using this as the base path.')
     group1.add_argument('--annotate', '-a', default=False, nargs=1, help='Annotate neurons from SOM provided')
+    group1.add_argument('--key','-k', default=None, nargs=1, help='If a single neuron needs to be updated. Requires the save option to point to a pickled instance of a previous annotation set. ')
 
     group2 = parser.add_argument_group(title='Visualise annotated neurons')
     group2.add_argument('--visualise', '-v', nargs=1, default=False,help='Visualise existing annotated neurons')
@@ -364,7 +399,13 @@ if __name__ == '__main__':
     print(args)
 
     if args['annotate'] != False:
-        perform_annotations(args['annotate'][0], save=args['save'][0])
+        if args['key'][0] is not None and args['save'][0] is not False:
+            from ast import literal_eval
+
+            key = literal_eval(args['key'][0]) 
+            update_annotation(args['annotate'][0], args['save'][0], key)
+        else:
+            perform_annotations(args['annotate'][0], save=args['save'][0])
 
     if args['visualise'] != False:
         visualise_annotations(args['visualise'][0])

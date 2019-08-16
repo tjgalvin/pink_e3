@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 import pink_utils2 as pu
 
-from pink_utils import Annotation
+from pink_utils2 import Annotation
 from itertools import combinations
 from collections import defaultdict
 from matplotlib.path import Path

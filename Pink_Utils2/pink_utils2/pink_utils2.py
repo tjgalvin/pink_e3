@@ -481,6 +481,59 @@ class Annotation():
 
         return img_flood
 
+    def robust_segment_neuron(self, channel: int=0, seg: float=6., step: float=1.,
+                              all_chan_clicks: bool=False):
+        """More robust segment routine to attempt to threshold a neuron with the clicks
+        as seed positions. Will iteratively rerun until there are a number of pixels in
+        the mask (tries to avoid an empty map). Does not use a local threshold. Will 
+        instead get the max and min intensities and divide that way.
+        
+        Keyword Arguments:
+            channel {int} -- Neuron channel to segement (default: {0})
+            seg {float} -- Number of segments to divide (default: {6.})
+            step {float} -- Step to move the segment sizes by (default: {1.})
+            all_chan_clicks {bool} -- Use the clicks from all channels when flood filling (default: {False})
+        """
+        image = self.neurons[channel].copy()
+
+        limage = np.log10(image)
+        mmin, mmax = np.min(limage), np.max(limage)
+        diff = mmax - mmin
+        
+        good = False
+        while not good:
+            thres = np.max(limage) - (diff / seg)
+            mask = limage < thres
+
+            image[mask] = 0
+            image[~mask] = 1
+
+            click_chans = [i for i in range(len(self.clicks))] if all_chan_clicks else [channel, ]
+
+            img_flood = image.copy()
+            for seed_chan in click_chans:
+                for c in self.clicks[seed_chan]:
+                    cc = tuple([int(c1) for c1 in c[::-1]])
+                    if img_flood[cc[0], cc[1]] == 1:
+                        img_flood = flood_fill(img_flood, cc, 0.5)
+
+            mask = img_flood == 0.5
+            img_flood[mask] = 1
+            img_flood[~mask] = 0
+
+            img_flood = binary_dilation(img_flood)
+            img_flood = ndi.binary_fill_holes(img_flood)
+
+            if np.sum(img_flood) < 20 and seg > 1:
+                seg -= step
+            else:
+                good = True
+
+        return img_flood
+        
+
+
+
 # ------------------------------------------------------------------------------
 # Transformation functions (for images)
 # ------------------------------------------------------------------------------
